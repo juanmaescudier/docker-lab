@@ -1,0 +1,32 @@
+# --- Notas privadas (no se publican) ---
+notas/
+
+# --- Secretos y entornos ---
+.env
+*.env
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# --- Docker / datos de volúmenes ---
+*.log
+data/
+redis-data/
+postgres-data/
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+
+# --- Editor ---
+.vscode/
+.idea/
+*.swp
