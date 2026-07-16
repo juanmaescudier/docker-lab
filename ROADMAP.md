@@ -93,7 +93,8 @@ El sistema crece en tres estados. No salto de golpe al final: cada estado es fun
 | Registry | **GHCR** (GitHub Container Registry) primero | Gratis, integrado con Actions que ya conozco; registry propio (`registry:2`) como módulo opcional. |
 | CI/CD | **GitHub Actions** | Reutilizo lo que aprendí en el lab de Linux, ahora aplicado a imágenes. |
 | Escaneo seguridad | **Trivy** y/o **docker scout** | Estándar actual; `docker scan` (Snyk) está obsoleto. |
-| Observabilidad | **Prometheus + Grafana + cAdvisor + node-exporter** | Reaprovecho Prometheus/Grafana que ya domino, ahora a nivel contenedor. |
+| Observabilidad (métricas) | **Prometheus + Grafana + cAdvisor + node-exporter** | Reaprovecho Prometheus/Grafana que ya domino, ahora a nivel contenedor. |
+| Observabilidad (logs) | **Elastic Stack: Elasticsearch + Kibana** + Fluent Bit | Pilar de logs. El keyword clásico y más reconocible del sector (ELK). Desde 2024 vuelve a ser open source (AGPLv3), sin pegas de licencia para un lab auto-hospedado. En mi lab de Linux monto el equivalente ligero (Grafana Loki) para tocar ambos enfoques. |
 | Kubernetes | **k3d** o **kind** (local) | Coste cero, iteración rápida; los comparo en M4. Cloud gestionado como extra final. |
 
 > Ninguna decisión es dogma: la justifico y la puedo cambiar módulo a módulo si tengo un motivo.
@@ -126,12 +127,23 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **DoD:** un push a `main` construye, escanea y publica la imagen automáticamente; el sistema multiservicio funciona vía Compose; los tags de imagen son trazables al commit.
 - **Valor CV:** demuestra CI/CD real y diseño multiservicio, dos cosas muy buscadas.
 
-### M3 — Observabilidad de contenedores
+### M3 — Observabilidad de contenedores (los dos pilares)
+La observabilidad tiene dos pilares que **no se pisan**: métricas (números en el tiempo) y logs (texto). Los abordo en ese orden.
+
+**M3a — Métricas**
 - **Objetivo:** ver qué pasa dentro del sistema con métricas y dashboards.
 - **Qué construyo:** Prometheus + Grafana contenerizados; cAdvisor y node-exporter para métricas de contenedor/host; exposición de métricas de la propia app; 1-2 dashboards útiles.
 - **Conceptos que quiero entender:** modelo pull de Prometheus; qué es un exporter; diferencia entre métricas de host, de contenedor y de aplicación; qué alertar y qué no.
 - **DoD:** Grafana muestra métricas reales de CPU/memoria por contenedor y al menos una métrica de negocio de la app; documentado qué mide cada dashboard.
-- **Valor CV:** conecto con mi lab de Linux y demuestro que sé operar, no solo desplegar.
+
+**M3b — Logs (centralización con el Elastic Stack / ELK)**
+- **Objetivo:** centralizar los logs de todos los servicios en un solo sitio y poder buscarlos/analizarlos.
+- **Qué construyo:** Elasticsearch + Kibana; un recolector de logs (Fluent Bit; alternativa: Beats/Elastic Agent) que envía los logs de los contenedores a Elasticsearch; al menos una vista/búsqueda útil en Kibana.
+- **Conceptos que quiero entender:** diferencia métricas vs logs; qué es un shipper/recolector (Fluent Bit) y por qué ya no se usa tanto Logstash; índice invertido y por qué Elasticsearch come RAM; qué es Elasticsearch vs OpenSearch (el fork de AWS) por cultura general.
+- **DoD:** los logs de la API y el worker aparecen centralizados en Kibana y puedo buscarlos/filtrarlos por servicio; documentado el flujo contenedor → Fluent Bit → Elasticsearch → Kibana.
+- **Nota de recursos:** Elasticsearch es lo más pesado del lab (JVM). Configuro el heap de forma explícita (p.ej. 512 MB–1 GB) y arranco en modo single-node. Con 64 GB de RAM no hay problema en levantarlo junto al resto.
+
+- **Valor CV:** demuestro los dos pilares de observabilidad. **Elasticsearch/Kibana (ELK)** es el keyword de logs más reconocible; además, en mi lab de Linux monto el equivalente ligero (**Grafana Loki**) para dominar los dos enfoques.
 
 ### M4 — Orquestación con Kubernetes (local)
 - **Objetivo:** migrar el sistema de Compose a un clúster local y entender el modelo de K8s.

@@ -78,7 +78,7 @@ docker-lab/
 Todavía en construcción. Cuando cierre el módulo M0, aquí documentaré el comando para levantar el sistema completo con un solo `docker compose up`. De momento, para clonar el repo:
 
 ```bash
-git clone https://github.com/gankafk/docker-lab.git
+git clone https://github.com/juanmaescudier/docker-lab.git
 ```
 
 ---
@@ -91,4 +91,4 @@ Consulta el plan completo y el estado de cada módulo en **[ROADMAP.md](ROADMAP.
 
 ## Autor
 
-Juanma — [github.com/gankafk](https://github.com/gankafk)
+Juanma — [github.com/juanmaescudier](https://github.com/juanmaescudier)
