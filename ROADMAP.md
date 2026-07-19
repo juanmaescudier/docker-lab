@@ -152,10 +152,12 @@ La observabilidad tiene dos pilares que **no se pisan**: métricas (números en 
 - **DoD:** el sistema corre en el clúster local; puedo escalar la API a N réplicas y sigue funcionando; documentada la equivalencia Compose → K8s.
 - **Valor CV:** **el módulo estrella.** Kubernetes es el skill más demandado y el que más me diferencia.
 
-### M5 (opcional) — Cierre y reproducibilidad
-- **Objetivo:** dejar todo desplegable de forma reproducible y, si procede, tocar cloud.
-- **Opciones (a decidir según avance):** despliegue del clúster/observabilidad de forma automatizada; GitOps ligero; o un despliegue puntual en cloud gestionado (con aviso de costes).
-- **Valor CV:** cierra la narrativa "de un contenedor a un sistema desplegable y observable".
+### M5 — Infraestructura como código y despliegue real en AWS
+- **Objetivo:** llevar el sistema a AWS de forma reproducible con IaC, para que sea un producto realmente desplegable (no solo un lab local).
+- **Qué construyo:** la infraestructura definida en **Terraform**; despliegue en AWS (**EKS** para Kubernetes, o **ECS** como alternativa más simple); pipeline que despliega.
+- **Conceptos que quiero entender:** IaC declarativa y el *state* de Terraform; qué recursos AWS hacen falta (VPC/red, clúster, registry ECR, IAM, secretos); coste y cómo apagarlo.
+- **Nota de costes:** usar free tier donde se pueda y **destruir la infra (`terraform destroy`) cuando no se use**. Vigilar EKS (tiene coste por hora).
+- **Valor CV:** el broche — "diseñé, contenericé, orqueté y desplegué un producto real de IA en AWS con IaC". Conecta directamente con mi lab previo de Linux/AWS.
 
 ---
 
