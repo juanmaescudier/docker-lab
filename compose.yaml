@@ -1,1 +1,42 @@
 # compose.yaml — orquesta el stack del M0: api + Postgres + Redis.
+networks:
+  frontend:
+  backend:
+    internal: true
+
+services:
+  nutriapp:
+    build: ./services/api
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+
+  postgres:
+    image: postgres:18.4
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+volumes:
+  pgdata:

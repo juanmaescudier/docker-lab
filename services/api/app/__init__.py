@@ -1,25 +1,49 @@
-"""Application factory: crea y configura la app Flask.
+"""Application factory: crea y configura la app Flask (ahora con Postgres)."""
+import os
 
-El patrón "factory" (fábrica) es una función que CREA la app y la devuelve,
-en vez de crearla como una variable global. Ventajas: es más fácil de testear
-y de configurar distinto según el entorno (dev, test, producción).
-"""
 from flask import Flask, jsonify
+from sqlalchemy import URL
+
+from .extensions import db
 
 
 def create_app():
     app = Flask(__name__)
 
-    # Endpoint de salud. Devuelve "ok" si el servicio está vivo.
-    # Más adelante Docker lo usará como healthcheck para saber si el
-    # contenedor está sano (esto conecta con el M0).
+    # --- Configuración de la conexión a Postgres ---
+    # Leemos los datos de conexión de variables de entorno (las pone el compose).
+    # Si falta alguna obligatoria, la app falla al arrancar (fail fast), que es lo que queremos.
+    user = os.environ["DB_USER"]
+    password = os.environ["DB_PASSWORD"]
+    host = os.environ["DB_HOST"]
+    port = os.environ.get("DB_PORT", "5432")
+    name = os.environ["DB_NAME"]
+
+    # Construimos la URL con URL.create() en vez de un f-string: así SQLAlchemy
+    # ESCAPA automáticamente los caracteres especiales de la contraseña (@, /, :, ...).
+    # Montarla a mano con un f-string rompe si la contraseña lleva una '@'.
+    app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
+        drivername="postgresql+psycopg",
+        username=user,
+        password=password,
+        host=host,
+        port=int(port),
+        database=name,
+    )
+
+    # Conectamos el objeto db (definido en extensions.py) con ESTA app.
+    db.init_app(app)
+
     @app.get("/health")
     def health():
         return jsonify(status="ok"), 200
 
-    # Importamos y registramos el "blueprint" del dominio Usuarios.
-    # Un blueprint = un grupo de endpoints relacionados (nuestro "dominio").
     from .users.routes import users_bp
     app.register_blueprint(users_bp)
+
+    # Crea las tablas si aún no existen. Es idempotente (no borra nada).
+    # Para el M0 nos vale; en el futuro esto se hace con "migraciones" (Alembic).
+    with app.app_context():
+        db.create_all()
 
     return app
