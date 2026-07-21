@@ -1,8 +1,7 @@
-"""Endpoints del dominio Usuarios (ahora contra PostgreSQL vía SQLAlchemy).
+"""Endpoints CRUD del dominio Usuarios (contra PostgreSQL vía SQLAlchemy).
 
-Ya no hay diccionario en memoria: cada usuario se guarda como una fila en la
-tabla "users" de Postgres, así que sobrevive a reinicios y lo comparten todos
-los workers.
+El registro (POST /users) ahora exige contraseña y la guarda hasheada.
+El login/logout/me viven en auth.py (usan sesión).
 """
 from flask import Blueprint, request, jsonify
 
@@ -12,14 +11,18 @@ from .models import User
 users_bp = Blueprint("users", __name__, url_prefix="/users")
 
 
-@users_bp.post("")            # POST /users -> crear (CREATE)
+@users_bp.post("")            # POST /users -> registro (CREATE)
 def create_user():
     data = request.get_json(silent=True) or {}
 
-    if not data.get("email"):
-        return jsonify(error="el campo 'email' es obligatorio"), 400
+    # Ahora email y password son obligatorios.
+    if not data.get("email") or not data.get("password"):
+        return jsonify(error="'email' y 'password' son obligatorios"), 400
 
-    # Creamos el objeto User (una fila en potencia).
+    # Evitamos duplicados de email antes de intentar insertar.
+    if User.query.filter_by(email=data["email"]).first():
+        return jsonify(error="ese email ya está registrado"), 409  # 409 = Conflict
+
     user = User(
         email=data["email"],
         name=data.get("name"),
@@ -28,20 +31,21 @@ def create_user():
         weight_kg=data.get("weight_kg"),
         goal=data.get("goal"),
     )
-    db.session.add(user)      # lo añadimos a la "sesión" (cambios pendientes)
-    db.session.commit()       # commit = confirma y escribe de verdad en Postgres
+    user.set_password(data["password"])   # se guarda el HASH, no la contraseña
+    db.session.add(user)
+    db.session.commit()
     return jsonify(user.to_dict()), 201
 
 
 @users_bp.get("")             # GET /users -> listar (READ)
 def list_users():
-    users = User.query.all()  # SELECT * FROM users
+    users = User.query.all()
     return jsonify([u.to_dict() for u in users]), 200
 
 
 @users_bp.get("/<int:user_id>")   # GET /users/5 -> ver uno (READ)
 def get_user(user_id):
-    user = db.session.get(User, user_id)   # busca por clave primaria
+    user = db.session.get(User, user_id)
     if user is None:
         return jsonify(error="usuario no encontrado"), 404
     return jsonify(user.to_dict()), 200

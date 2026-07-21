@@ -6,6 +6,9 @@ notas/
 *.env
 !.env.example
 
+# --- Cookie jar de curl (contiene tokens de sesión) ---
+cookies.txt
+
 # --- Python ---
 __pycache__/
 *.py[cod]

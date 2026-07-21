@@ -15,7 +15,13 @@ services:
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_NAME=${DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - SECRET_KEY=${SECRET_KEY}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     networks:
@@ -38,5 +44,15 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:8.4
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
 volumes:
   pgdata:
