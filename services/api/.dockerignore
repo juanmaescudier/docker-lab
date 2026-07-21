@@ -1,1 +1,19 @@
-# .dockerignore del servicio "api"
+# Caché y bytecode de Python (se regenera solo, no sirve en la imagen)
+__pycache__/
+*.pyc
+*.pyo
+
+# Entornos virtuales locales (enormes e inútiles: las deps se instalan con pip en la imagen)
+.venv/
+venv/
+
+# Secretos (¡nunca dentro de la imagen!)
+.env
+
+# Cachés de herramientas de desarrollo
+.pytest_cache/
+.mypy_cache/
+
+# El propio Dockerfile/dockerignore no hacen falta dentro de la imagen (opcional)
+Dockerfile
+.dockerignore
