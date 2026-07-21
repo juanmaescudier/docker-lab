@@ -65,21 +65,52 @@ El detalle completo, con las decisiones técnicas justificadas y los criterios d
 docker-lab/
 ├── README.md          # Este archivo
 ├── ROADMAP.md         # Diseño y plan por módulos
-├── .gitignore
-└── ...                # (se irá completando módulo a módulo)
+├── LICENSE
+├── compose.yaml       # Orquesta el stack (api + Postgres)
+├── .env.example       # Plantilla de variables de entorno
+├── docs/              # Decisiones de arquitectura (ADR)
+├── services/
+│   └── api/           # Servicio Flask: Dockerfile + código de la app
+└── infra/             # Observabilidad, Kubernetes e IaC (más adelante)
 ```
 
-> La estructura definitiva (carpetas por servicio, `infra/`, `docs/`) la voy fijando conforme avanzo. La documento en el ROADMAP.
+> La estructura crece módulo a módulo. Las decisiones importantes quedan registradas como ADR en `docs/`.
 
 ---
 
 ## Cómo levantarlo
 
-Todavía en construcción. Cuando cierre el módulo M0, aquí documentaré el comando para levantar el sistema completo con un solo `docker compose up`. De momento, para clonar el repo:
+Requisitos: Docker y Docker Compose.
 
 ```bash
 git clone https://github.com/juanmaescudier/docker-lab.git
+cd docker-lab
+
+# Copiar la plantilla de variables y ajustar los valores
+cp .env.example .env
+
+# Construir y levantar el stack (API + PostgreSQL)
+docker compose up --build
 ```
+
+La API queda disponible en `http://localhost:8000`. Endpoints del dominio Usuarios:
+
+```bash
+# Crear un usuario
+curl -X POST http://localhost:8000/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","name":"Demo","weight_kg":80}'
+
+# Listar usuarios
+curl http://localhost:8000/users
+
+# Comprobar salud del servicio
+curl http://localhost:8000/health
+```
+
+Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina.
+
+> Estado actual: módulo M0 en curso. El stack completo (Redis, observabilidad, Kubernetes, IaC) se incorpora en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
 
 ---
 
