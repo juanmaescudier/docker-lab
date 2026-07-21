@@ -1,8 +1,20 @@
 # Docker Lab — Laboratorio de contenedores
 
-Laboratorio personal donde construyo, paso a paso, un sistema en contenedores que empieza siendo un único servicio y termina orquestado, observado y desplegado con CI/CD. Lo hago para consolidar mi perfil **Cloud / DevOps Junior** y, sobre todo, para entender de verdad cada decisión que tomo.
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
+![Gunicorn](https://img.shields.io/badge/Gunicorn-499848?logo=gunicorn&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-3fb950)
+![Estado](https://img.shields.io/badge/estado-M0_completado-3fb950)
 
-> **Estado:** en construcción. Ahora mismo estoy en el módulo **M0 (fundamentos)**. Voy avanzando en paralelo a un curso de Docker.
+Laboratorio de contenedores construido de forma progresiva como proyecto de portfolio para perfiles **Cloud / DevOps Junior**. Empieza siendo un único servicio y evoluciona hasta un sistema multiservicio orquestado, observado y desplegado con CI/CD e IaC. El objetivo no es académico: es **demostrar competencias prácticas** y poder **defender cada decisión técnica** en una entrevista.
+
+![Arquitectura del laboratorio (M0)](docs/img/architecture.svg)
+
+> **Estado:** en construcción. Ahora mismo en el módulo **M0 (fundamentos)** — API en contenedores con PostgreSQL, persistencia y acceso vía puerto publicado. El resto del stack (Redis, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
 
 ---
 
@@ -89,28 +101,33 @@ cd docker-lab
 # Copiar la plantilla de variables y ajustar los valores
 cp .env.example .env
 
-# Construir y levantar el stack (API + PostgreSQL)
+# Construir y levantar el stack (API + PostgreSQL + Redis)
 docker compose up --build
 ```
 
-La API queda disponible en `http://localhost:8000`. Endpoints del dominio Usuarios:
+La API queda disponible en `http://localhost:8000`. Flujo de usuarios y sesión:
 
 ```bash
-# Crear un usuario
+# Registro (email y password obligatorios)
 curl -X POST http://localhost:8000/users \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","name":"Demo","weight_kg":80}'
+  -d '{"email":"demo@example.com","password":"1234","name":"Demo"}'
 
-# Listar usuarios
-curl http://localhost:8000/users
+# Login: guarda la cookie de sesión (httpOnly) en cookies.txt
+curl -c cookies.txt -X POST http://localhost:8000/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","password":"1234"}'
 
-# Comprobar salud del servicio
-curl http://localhost:8000/health
+# Quién soy: envía la cookie de sesión
+curl -b cookies.txt http://localhost:8000/me
+
+# Cerrar sesión
+curl -b cookies.txt -X POST http://localhost:8000/logout
 ```
 
-Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina.
+Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina. Las sesiones viven en Redis y son efímeras.
 
-> Estado actual: módulo M0 en curso. El stack completo (Redis, observabilidad, Kubernetes, IaC) se incorpora en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
+> Estado actual: **módulo M0 completado** (API contenerizada + PostgreSQL + sesiones en Redis + autenticación). El resto del stack (CI/CD, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
 
 ---
 
