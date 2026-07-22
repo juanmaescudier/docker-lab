@@ -8,7 +8,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3fb950)
-![Estado](https://img.shields.io/badge/estado-M0_completado-3fb950)
+![Estado](https://img.shields.io/badge/estado-M1_completado-3fb950)
 
 Laboratorio de contenedores construido de forma progresiva como proyecto de portfolio para perfiles **Cloud / DevOps Junior**. Empieza siendo un único servicio y evoluciona hasta un sistema multiservicio orquestado, observado y desplegado con CI/CD e IaC. El objetivo no es académico: es **demostrar competencias prácticas** y poder **defender cada decisión técnica** en una entrevista.
 
@@ -127,7 +127,7 @@ curl -b cookies.txt -X POST http://localhost:8000/logout
 
 Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina. Las sesiones viven en Redis y son efímeras.
 
-> Estado actual: **módulo M0 completado** (API contenerizada + PostgreSQL + sesiones en Redis + autenticación). El resto del stack (CI/CD, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
+> Estado actual: **M0 y M1 completados** — API contenerizada con PostgreSQL, sesiones en Redis y autenticación (M0), e imagen endurecida y escaneada con Trivy (M1). El resto del stack (CI/CD, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
 
 ---
 

@@ -10,5 +10,6 @@ Uso ADRs porque en un proyecto real el "por qué se hizo así" se pierde con el 
 - [`adr/0001-arquitectura-y-alcance-inicial.md`](adr/0001-arquitectura-y-alcance-inicial.md) — decisiones de arranque del proyecto.
 - [`adr/0002-punto-de-montaje-postgres.md`](adr/0002-punto-de-montaje-postgres.md) — punto de montaje del volumen de PostgreSQL 18+.
 - [`adr/0003-autenticacion-por-sesion.md`](adr/0003-autenticacion-por-sesion.md) — autenticación por sesión con Flask-Session sobre Redis.
+- [`adr/0004-seguridad-de-la-imagen.md`](adr/0004-seguridad-de-la-imagen.md) — endurecimiento y elección de imagen base (distroless vs slim).
 
 Los ADRs se numeran de forma incremental y **no se editan** una vez aceptados: si una decisión cambia, se crea un ADR nuevo que reemplaza al anterior (y se marca el viejo como *Superseded*).
