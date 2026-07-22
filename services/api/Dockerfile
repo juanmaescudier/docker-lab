@@ -3,6 +3,9 @@
 
 FROM python:3.13-slim
 
+# Parchear el SO cuanto antes (capa estable, cacheable)
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Creación de un directorio de trabajo en Docker
 WORKDIR /app
 
