@@ -1,6 +1,6 @@
 # Docker Lab — Laboratorio de contenedores
 
-[![CI](https://github.com/juanmaescudier/docker-lab/actions/workflows/deploy-nutriapp-image.yml/badge.svg)](https://github.com/juanmaescudier/docker-lab/actions/workflows/deploy-nutriapp-image.yml)
+[![CI](https://github.com/juanmaescudier/docker-lab/actions/workflows/publish-nutriapp-image.yml/badge.svg)](https://github.com/juanmaescudier/docker-lab/actions/workflows/publish-nutriapp-image.yml)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
