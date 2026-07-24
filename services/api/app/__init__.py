@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import redis
 from flask import Flask, jsonify
+from prometheus_flask_exporter import PrometheusMetrics
 from sqlalchemy import URL
 
 from .extensions import db, sess
@@ -48,6 +49,14 @@ def create_app():
     )
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)  # caducidad de la sesión
     sess.init_app(app)
+
+    # ---------- Métricas para Prometheus ----------
+    # Expone /metrics automáticamente y mide cada petición (nº, latencia, método,
+    # ruta, código de estado). Prometheus raspará ese /metrics.
+    # NOTA: con 1 worker de gunicorn vale así. Con varios workers habría que
+    # activar el modo multiproceso (PROMETHEUS_MULTIPROC_DIR).
+    metrics = PrometheusMetrics(app)
+    metrics.info("nutriapp_info", "Información de la app nutriapp", version="0.1.0")
 
     # ---------- Salud ----------
     @app.get("/health")

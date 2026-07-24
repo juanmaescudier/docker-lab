@@ -3,6 +3,7 @@ networks:
   frontend:
   backend:
     internal: true
+  monitoring:
 
 services:
   nutriapp:
@@ -27,6 +28,7 @@ services:
     networks:
       - frontend
       - backend
+      - monitoring
 
   postgres:
     image: postgres:18.4

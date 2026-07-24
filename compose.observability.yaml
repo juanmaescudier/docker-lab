@@ -1,0 +1,56 @@
+networks:
+  monitoring:
+
+services:
+  prometheus:
+    image: prom/prometheus:v3
+    volumes:
+      - ./infra/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+    ports:
+      - 9090:9090
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    #privileged: true
+    #teniendo los mounts de volumes y el dev deberia de funcionar sin la necesidad de privileged true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - 8080:8080
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:12.3
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+      - node-exporter
+
+  node-exporter:
+    image: prom/node-exporter:v1
+    networks:
+      - monitoring
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro'
+    command:
+      - '--path.rootfs=/host'
+
+volumes:
+  grafana-data:
