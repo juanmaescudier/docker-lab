@@ -15,7 +15,7 @@ services:
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.5
     restart: unless-stopped
-    #privileged: true
+    privileged: true
     #teniendo los mounts de volumes y el dev deberia de funcionar sin la necesidad de privileged true
     devices:
       - /dev/kmsg
@@ -36,6 +36,8 @@ services:
     restart: unless-stopped
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro  #Importamos con estos dos volumenes los dashboards ya creados de grafana (app y cAdvisor)
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - monitoring
     depends_on:

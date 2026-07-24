@@ -1,0 +1,20 @@
+# provider.yaml — provisioning de dashboards.
+#
+# OJO a un matiz importante: este fichero NO contiene ningún dashboard.
+# Solo le dice a Grafana DE QUÉ CARPETA del disco debe cargar los ficheros .json.
+# Los dashboards en sí son los .json que dejarás en infra/grafana/dashboards/.
+
+apiVersion: 1
+
+providers:
+  - name: 'default'                       # nombre interno del proveedor (cualquiera vale)
+    type: file                            # cargar los dashboards desde ficheros en disco
+    disableDeletion: false                # permite borrar un dashboard desde la UI si hiciera falta
+    updateIntervalSeconds: 10             # cada cuántos segundos reescanea la carpeta buscando cambios
+    allowUiUpdates: true                  # deja editar en la UI; el cambio se revierte al recargar el
+                                          # fichero (útil para trastear y luego exportar la versión buena)
+    options:
+      path: /var/lib/grafana/dashboards   # ruta DENTRO del contenedor donde estarán los .json.
+                                          # La montamos ahí desde el compose (siguiente paso).
+      foldersFromFilesStructure: true     # si organizas los .json en subcarpetas, Grafana crea
+                                          # esas mismas carpetas en su menú. Ordena mucho.

@@ -1,0 +1,22 @@
+# datasource.yaml — provisioning del datasource de Prometheus.
+#
+# Grafana lee este fichero AL ARRANCAR y crea el datasource automáticamente,
+# sin que haya que añadirlo a mano por la UI. La "fuente de verdad" pasa a ser
+# este fichero versionado en git, no un clic en la interfaz.
+
+apiVersion: 1                     # versión del FORMATO de provisioning (no la de Grafana)
+
+datasources:
+  - name: prometheus              # nombre visible del datasource en Grafana
+    type: prometheus              # tipo (Grafana soporta muchos: prometheus, loki, postgres...)
+    uid: prometheus               # UID FIJO. Es la clave de todo esto: los dashboards
+                                  # referencian el datasource por su UID. Al fijarlo a un
+                                  # valor conocido, los JSON de dashboard funcionan igual
+                                  # en cualquier instancia (la tuya, la de un compañero, CI...).
+    access: proxy                 # Grafana ejecuta las queries desde el SERVIDOR, no desde
+                                  # tu navegador. Más seguro y evita problemas de CORS/red.
+    url: http://prometheus:9090   # DNS interno de Docker: nombre del servicio + puerto.
+                                  # Funciona porque grafana y prometheus comparten la red 'monitoring'.
+    isDefault: true               # datasource por defecto al crear un panel nuevo
+    editable: false               # no se puede editar desde la UI: obliga a cambiarlo aquí,
+                                  # en el fichero (buena práctica: config como código).
