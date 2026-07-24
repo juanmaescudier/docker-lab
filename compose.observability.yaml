@@ -13,7 +13,7 @@ services:
       - monitoring
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    image: ghcr.io/google/cadvisor:v0.60.5
     restart: unless-stopped
     #privileged: true
     #teniendo los mounts de volumes y el dev deberia de funcionar sin la necesidad de privileged true
