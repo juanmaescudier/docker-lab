@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dft2gja6z12wwc"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -114,7 +114,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dft2gja6z12wwc"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
@@ -131,7 +131,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dft2gja6z12wwc"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -215,7 +215,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dft2gja6z12wwc"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum(rate(flask_http_request_total[1m])) by (method, status)",
@@ -230,7 +230,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dft2gja6z12wwc"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
