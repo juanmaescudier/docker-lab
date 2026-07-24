@@ -9,13 +9,13 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3fb950)
-![Estado](https://img.shields.io/badge/estado-M2_CI%2FCD-3fb950)
+![Estado](https://img.shields.io/badge/estado-M3_observabilidad-3fb950)
 
 Laboratorio de contenedores construido de forma progresiva como proyecto de portfolio para perfiles **Cloud / DevOps Junior**. Empieza siendo un único servicio y evoluciona hasta un sistema multiservicio orquestado, observado y desplegado con CI/CD e IaC. El objetivo no es académico: es **demostrar competencias prácticas** y poder **defender cada decisión técnica** en una entrevista.
 
 ![Arquitectura del laboratorio (M0)](docs/img/architecture.svg)
 
-> **Estado:** en construcción. Ahora mismo en el módulo **M0 (fundamentos)** — API en contenedores con PostgreSQL, persistencia y acceso vía puerto publicado. El resto del stack (Redis, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
+> **Estado:** en construcción. Módulos **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2), y observabilidad con Prometheus + Grafana en tres capas —host, contenedor y app— (M3). Lo siguiente: multiservicio, Kubernetes e IaC en AWS, según el [ROADMAP](ROADMAP.md).
 
 ---
 
@@ -128,9 +128,23 @@ curl -b cookies.txt -X POST http://localhost:8000/logout
 
 Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina. Las sesiones viven en Redis y son efímeras.
 
-> Estado actual: **M0 y M1 completados** — API contenerizada con PostgreSQL, sesiones en Redis y autenticación (M0), e imagen endurecida y escaneada con Trivy (M1). El resto del stack (CI/CD, observabilidad, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
+> Estado actual: **M0–M3 completados** — API contenerizada con PostgreSQL, sesiones en Redis y autenticación (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2), y observabilidad con Prometheus + Grafana + cAdvisor + node-exporter, con dashboards como código (M3). El resto (multiservicio, Kubernetes, IaC en AWS) llega en los módulos siguientes, según el [ROADMAP](ROADMAP.md).
 
 ---
+
+## Observabilidad
+
+El stack se monitoriza en tres capas —host, contenedor y aplicación— con **Prometheus** (métricas) y **Grafana** (dashboards), todo provisionado como código (ver [ADR-0006](docs/adr/0006-observabilidad-prometheus-grafana.md)).
+
+**Métricas de la aplicación** (Flask), siguiendo el método **RED** —Rate, Errors, Duration—. Construí los paneles a mano con PromQL:
+
+![Dashboard de la aplicación (método RED)](docs/img/grafana-nutriapp.png)
+
+**Métricas por contenedor** con cAdvisor (CPU, memoria y red de cada servicio), también con paneles propios:
+
+![Dashboard de contenedores (cAdvisor)](docs/img/grafana-cadvisor.png)
+
+Para la capa de host uso el dashboard *Node Exporter Full* (importado de la comunidad, ID 1860) sobre las métricas de `node-exporter`.
 
 ## Roadmap
 
