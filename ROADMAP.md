@@ -1,8 +1,8 @@
 # Docker Lab — Diseño y roadmap
 
 > Mi laboratorio de contenedores de nivel portfolio para un rol **Cloud / DevOps Junior**.
-> Última actualización: 7 de julio de 2026.
-> **Estado:** diseño cerrado. Empezando por el módulo M0.
+> Última actualización: 26 de julio de 2026.
+> **Estado:** M0, M1 y M3 completados. De M2 tengo hecha la parte de CI/CD; el corte a multiservicio (API + worker + cola) queda pendiente y es lo siguiente que abordo, antes de Kubernetes.
 
 ---
 
@@ -112,6 +112,7 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **DoD:** `docker compose up` levanta los 3 servicios sanos; la API responde y persiste datos tras `down`/`up`; la imagen de la API pesa lo razonable y no corre como root; el README explica cada decisión.
 - **Valor CV:** demuestra que sé hacer un Dockerfile *de verdad*, no copiado. Es lo primero que mira un revisor técnico.
 - *Camina con el curso de Docker.*
+- **Estado: completado.** DoD cumplida. Añadí además autenticación por sesión sobre Redis (ADR-0003), que no estaba en el plan inicial. Aprendí por el camino que Postgres 18 monta el volumen en `/var/lib/postgresql` y no en la ruta que asumí (ADR-0002).
 
 ### M1 — Calidad y seguridad de imágenes
 - **Objetivo:** endurecer las imágenes y la gestión de secretos.
@@ -119,6 +120,7 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **Conceptos que quiero entender:** superficie de ataque; por qué `latest` es un anti-patrón en prod; musl vs glibc (alpine); diferencia entre secreto en `ENV`, en `.env` y en un gestor de secretos.
 - **DoD:** el escaneo pasa sin vulnerabilidades críticas evitables; ningún secreto en el repo ni en la imagen; versiones fijadas; documentado qué acepté y por qué.
 - **Valor CV:** "seguridad de contenedores" es un diferenciador claro en juniors.
+- **Estado: completado.** DoD cumplida (ADR-0004). Probé distroless esperando reducir vulnerabilidades y **subieron** (168 → 211): su base era Debian 12 y una dependencia condicional de redis desaparecía según la versión de Python. Volví a `slim` con el escaneo documentado. Lección: menos CVEs no es lo mismo que menos superficie de ataque, y hay que medir en vez de suponer.
 
 ### M2 — De monolito a multiservicio + CI/CD
 - **Objetivo:** partir la app en **API + worker + cola** y automatizar el ciclo de imágenes.
@@ -126,6 +128,7 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **Conceptos que quiero entender:** por qué separar responsabilidades en servicios; comunicación asíncrona (cola) vs síncrona (HTTP); versionado de imágenes (semver, sha, `latest`); qué se ejecuta en CI y por qué.
 - **DoD:** un push a `main` construye, escanea y publica la imagen automáticamente; el sistema multiservicio funciona vía Compose; los tags de imagen son trazables al commit.
 - **Valor CV:** demuestra CI/CD real y diseño multiservicio, dos cosas muy buscadas.
+- **Estado: parcialmente completado.** Hecha la parte de **CI/CD** (ADR-0005): un push a `main` construye, escanea con Trivy y publica en GHCR, con tags trazables al commit y sin publicar nada que no haya pasado el escaneo. **Pendiente el corte a multiservicio** (API + worker + cola): decidí adelantar la observabilidad (M3) para tener visibilidad *antes* de añadir más piezas móviles, y hago el corte justo después. Aprendizaje extra: fijo las actions de terceros por SHA de commit y no por tag, a raíz del secuestro de tags de `trivy-action` en marzo de 2026.
 
 ### M3 — Observabilidad de contenedores (los dos pilares)
 La observabilidad tiene dos pilares que **no se pisan**: métricas (números en el tiempo) y logs (texto). Los abordo en ese orden.
@@ -135,6 +138,7 @@ La observabilidad tiene dos pilares que **no se pisan**: métricas (números en 
 - **Qué construyo:** Prometheus + Grafana contenerizados; cAdvisor y node-exporter para métricas de contenedor/host; exposición de métricas de la propia app; 1-2 dashboards útiles.
 - **Conceptos que quiero entender:** modelo pull de Prometheus; qué es un exporter; diferencia entre métricas de host, de contenedor y de aplicación; qué alertar y qué no.
 - **DoD:** Grafana muestra métricas reales de CPU/memoria por contenedor y al menos una métrica de negocio de la app; documentado qué mide cada dashboard.
+- **Estado: completado.** DoD cumplida y superada (ADR-0006): tres dashboards, uno por capa (host, contenedor y app), y los de contenedor y app los construí a mano con PromQL en lugar de importarlos. Añadí también **dashboards y datasource como código** (provisioning), que no estaba planeado: un `up` desde cero los deja cargados. Dos cosas que me costaron: cAdvisor 0.49 no lee el image store de containerd (lo diagnostiqué por sus logs y lo resolví con la 0.60.5), y en Docker Desktop/WSL2 no alcanza el socket de containerd, así que valido las métricas de contenedor en una VM Ubuntu.
 
 **M3b — Logs (centralización con el Elastic Stack / ELK)**
 - **Objetivo:** centralizar los logs de todos los servicios en un solo sitio y poder buscarlos/analizarlos.
@@ -142,6 +146,7 @@ La observabilidad tiene dos pilares que **no se pisan**: métricas (números en 
 - **Conceptos que quiero entender:** diferencia métricas vs logs; qué es un shipper/recolector (Fluent Bit) y por qué ya no se usa tanto Logstash; índice invertido y por qué Elasticsearch come RAM; qué es Elasticsearch vs OpenSearch (el fork de AWS) por cultura general.
 - **DoD:** los logs de la API y el worker aparecen centralizados en Kibana y puedo buscarlos/filtrarlos por servicio; documentado el flujo contenedor → Fluent Bit → Elasticsearch → Kibana.
 - **Nota de recursos:** Elasticsearch es lo más pesado del lab (JVM). Configuro el heap de forma explícita (p.ej. 512 MB–1 GB) y arranco en modo single-node. Con 64 GB de RAM no hay problema en levantarlo junto al resto.
+- **Estado: completado.** DoD cumplida en su parte de API (ADR-0007): los logs de todos los contenedores llegan a Elasticsearch vía Fluent Bit y los filtro en Kibana por servicio, código de estado o latencia. El worker aún no existe (queda con el corte a multiservicio de M2), así que sus logs los validaré entonces. Fui más allá de lo previsto con **logging estructurado en JSON** en la app, con `request_id` por petición para poder correlacionar cuando haya varios servicios. Elegí el plugin `tail` de Fluent Bit sobre el log driver de Docker porque es el mismo patrón que se usa en Kubernetes con un DaemonSet. Lo que más me enseñó: los conflictos de mapeo de Elasticsearch, que rechazaban documentos **en silencio** hasta que activé `Trace_Error` en el output y vi el motivo.
 
 - **Valor CV:** demuestro los dos pilares de observabilidad. **Elasticsearch/Kibana (ELK)** es el keyword de logs más reconocible; además, en mi lab de Linux monto el equivalente ligero (**Grafana Loki**) para dominar los dos enfoques.
 
