@@ -15,6 +15,6 @@ providers:
                                           # fichero (útil para trastear y luego exportar la versión buena)
     options:
       path: /var/lib/grafana/dashboards   # ruta DENTRO del contenedor donde estarán los .json.
-                                          # La montamos ahí desde el compose (siguiente paso).
+                                          # La montamos ahí desde el compose.
       foldersFromFilesStructure: true     # si organizas los .json en subcarpetas, Grafana crea
                                           # esas mismas carpetas en su menú. Ordena mucho.
