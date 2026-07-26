@@ -9,13 +9,13 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3fb950)
-![Estado](https://img.shields.io/badge/estado-M3_observabilidad_en_curso-e3b341)
+![Estado](https://img.shields.io/badge/estado-M3_observabilidad-3fb950)
 
 Laboratorio de contenedores construido de forma progresiva como proyecto de portfolio para perfiles **Cloud / DevOps Junior**. Empieza siendo un único servicio y evoluciona hasta un sistema multiservicio orquestado, observado y desplegado con CI/CD e IaC. El objetivo no es académico: es **demostrar competencias prácticas** y poder **defender cada decisión técnica** en una entrevista.
 
 ![Arquitectura del laboratorio (M0)](docs/img/architecture.svg)
 
-> **Estado:** en construcción. **M0–M2 completados** y **M3 en curso** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2), y observabilidad de **métricas** con Prometheus + Grafana en tres capas —host, contenedor y app— (M3a). Pendiente la capa de **logs** (M3b). Lo siguiente, según el [ROADMAP](ROADMAP.md): multiservicio, Kubernetes e IaC en AWS.
+> **Estado:** en construcción. **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2), y observabilidad completa con sus dos pilares: **métricas** (Prometheus + Grafana, en tres capas) y **logs** (Elasticsearch + Kibana + Fluent Bit) (M3). Lo siguiente, según el [ROADMAP](ROADMAP.md): multiservicio, Kubernetes e IaC en AWS.
 
 ---
 
@@ -68,7 +68,8 @@ El detalle completo, con las decisiones técnicas justificadas y los criterios d
 | Registry | GitHub Container Registry (GHCR) |
 | CI/CD | GitHub Actions |
 | Seguridad | Trivy / docker scout |
-| Observabilidad | Prometheus + Grafana + cAdvisor + node-exporter |
+| Observabilidad (métricas) | Prometheus + Grafana + cAdvisor + node-exporter |
+| Observabilidad (logs) | Elasticsearch + Kibana + Fluent Bit |
 
 ---
 
@@ -146,7 +147,25 @@ El stack se monitoriza en tres capas —host, contenedor y aplicación— con **
 
 Para la capa de host uso el dashboard *Node Exporter Full* (importado de la comunidad, ID 1860) sobre las métricas de `node-exporter`.
 
-> Esto cubre las **métricas** (M3a). La capa de **logs** (M3b, Elastic Stack) está pendiente y es el siguiente paso.
+### Logs centralizados
+
+El segundo pilar. Los logs de todos los contenedores van a **Elasticsearch** y se consultan desde **Kibana**, recolectados por **Fluent Bit** (ver [ADR-0007](docs/adr/0007-logs-elastic-stack.md)):
+
+```
+Contenedores (stdout) → Fluent Bit (tail) → Elasticsearch (un índice/día) → Kibana
+```
+
+La API emite **logs estructurados en JSON**: cada petición genera un registro con `service`, `level`, `method`, `path`, `status`, `duration_ms` y un `request_id` que permite rastrear una petición concreta. Eso convierte los logs en datos consultables:
+
+```
+service: nutriapp and status >= 400
+duration_ms > 100
+level: ERROR
+```
+
+![Logs de la API en Kibana](docs/img/kibana-logs.png)
+
+> Nota de entorno: la recolección con `tail` requiere Docker sobre **Linux nativo**. En Docker Desktop/WSL2 los ficheros de log viven en la VM interna de Docker y no son accesibles por bind mount, así que valido esta parte en una VM Ubuntu.
 
 ## Roadmap
 
