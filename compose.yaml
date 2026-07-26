@@ -4,6 +4,7 @@ networks:
   backend:
     internal: true
   monitoring:
+  logging:
 
 services:
   nutriapp:
