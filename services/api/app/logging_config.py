@@ -17,6 +17,7 @@ import time
 import uuid
 
 from flask import g, request
+from werkzeug.exceptions import HTTPException
 
 # Nombre del servicio. Se puede sobrescribir por variable de entorno, lo que
 # resulta útil cuando la misma imagen se despliega con distintos roles.
@@ -129,7 +130,15 @@ def configurar_logging(app):
     # ---------- 3. Excepciones no controladas ----------
     @app.errorhandler(Exception)
     def _registrar_excepcion(error):
-        # logger.exception incluye la traza completa en el campo 'exception'.
+        # OJO: este handler recibe TODAS las excepciones, y Flask representa los
+        # errores HTTP normales (404, 401, 405...) como HTTPException. Esos no son
+        # fallos del servidor: hay que devolverlos tal cual o convertiríamos un
+        # 404 en un 500. El log de la petición ya los registra como WARNING.
+        if isinstance(error, HTTPException):
+            return error
+
+        # A partir de aquí sí son errores inesperados: traza completa al log.
+        # logger.exception incluye el stack trace en el campo 'exception'.
         app.logger.exception(
             "excepcion no controlada",
             extra={"extra_fields": {
