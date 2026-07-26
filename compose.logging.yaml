@@ -1,0 +1,55 @@
+networks:
+  logging:
+
+services:
+  elasticsearch:
+    image: elasticsearch:9.3.8
+    ports:
+      - 9200:9200
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false    # Esto JAMÁS  se haría en producción, lo hago para no pelearme con certificados, etc. en el desarrollo
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - logging
+  
+  kibana:
+    image: kibana:9.3.8
+    ports:
+      - 5601:5601
+    networks:
+      - logging
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+  fluent-bit:
+    image: fluent/fluent-bit:4.2.7
+    volumes:
+      - ./infra/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - fluentbit-data:/var/log/flb
+    
+    networks:
+      - logging
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+
+volumes:
+  esdata:
+  fluentbit-data:
