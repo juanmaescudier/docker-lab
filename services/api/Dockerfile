@@ -24,4 +24,4 @@ RUN useradd -r -u 1001 appuser
 USER appuser
 
 # Ejecucion del codigo
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "wsgi:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "wsgi:app"]
