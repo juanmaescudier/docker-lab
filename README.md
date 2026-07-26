@@ -19,6 +19,21 @@ Laboratorio de contenedores construido de forma progresiva como proyecto de port
 
 ---
 
+## Contenido
+
+- [Por qué este proyecto](#por-qué-este-proyecto)
+- [Qué quiero demostrar](#qué-quiero-demostrar)
+- [La aplicación](#la-aplicación)
+- [Cómo evoluciona el sistema](#cómo-evoluciona-el-sistema)
+- [Stack](#stack)
+- [Estructura del repositorio](#estructura-del-repositorio)
+- [Cómo levantarlo](#cómo-levantarlo) — detalle en la [guía de uso](docs/uso.md)
+- [Observabilidad](#observabilidad)
+- [Roadmap](#roadmap) — plan completo en [ROADMAP.md](ROADMAP.md)
+- [Decisiones de arquitectura (ADR)](#decisiones-de-arquitectura-adr)
+
+---
+
 ## Por qué este proyecto
 
 Ya tengo un laboratorio previo de Linux + AWS con máquinas virtuales (bastión, web, base de datos, monitorización con Prometheus/Grafana, backups 3-2-1 a S3 y CI/CD con GitHub Actions). Con este lab quiero dar el siguiente paso: pasar del paradigma de VMs al de **contenedores y orquestación**, que es justo el recorrido que hace un DevOps en la vida real.
@@ -108,74 +123,22 @@ Requisitos: Docker y Docker Compose.
 git clone https://github.com/juanmaescudier/docker-lab.git
 cd docker-lab
 
-# Copiar la plantilla de variables y ajustar los valores
-cp .env.example .env
-
-# Construir y levantar el stack (API + PostgreSQL + Redis)
-docker compose up --build
+cp .env.example .env          # copiar la plantilla de variables y ajustar valores
+docker compose up --build     # API + PostgreSQL + Redis
 ```
 
-La API queda disponible en `http://localhost:8000`. Flujo de usuarios y sesión:
+La API queda en `http://localhost:8000`. La observabilidad es **opcional** y se añade combinando ficheros Compose:
 
 ```bash
-# Registro (email y password obligatorios)
-curl -X POST http://localhost:8000/users \
-  -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","password":"1234","name":"Demo"}'
-
-# Login: guarda la cookie de sesión (httpOnly) en cookies.txt
-curl -c cookies.txt -X POST http://localhost:8000/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","password":"1234"}'
-
-# Quién soy: envía la cookie de sesión
-curl -b cookies.txt http://localhost:8000/me
-
-# Cerrar sesión
-curl -b cookies.txt -X POST http://localhost:8000/logout
-```
-
-Los datos persisten en un volumen de Docker: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina. Las sesiones viven en Redis y son efímeras.
-
-### Levantar la observabilidad
-
-> **Antes de empezar: usa Docker sobre Linux nativo.**
-> Dos partes del stack de observabilidad **no funcionan en Docker Desktop** (Windows/WSL2 y, por el mismo motivo, macOS): las **métricas por contenedor** (cAdvisor) y la **recolección de logs** (Fluent Bit). La causa es la misma en ambos casos: Docker Desktop ejecuta el daemon dentro de una VM propia, y ni el socket de containerd ni los ficheros de log de `/var/lib/docker/containers` son accesibles desde un contenedor. Los servicios arrancan sin errores visibles, pero no recogen datos, que es lo traicionero del asunto.
->
-> El resto sí funciona en cualquier sitio: Prometheus, Grafana, las métricas de la app y las del host, Elasticsearch y Kibana.
->
-> Yo desarrollo en Windows y **valido la observabilidad en una VM Ubuntu** con Docker Engine nativo, que es lo que se parece a producción. El diagnóstico completo de ambos casos está en los ADR [0006](docs/adr/0006-observabilidad-prometheus-grafana.md) y [0007](docs/adr/0007-logs-elastic-stack.md).
-
-El stack está partido en tres ficheros Compose que se combinan con `-f`, de forma que la observabilidad es **opcional**: la app funciona sin ella y la añades cuando quieres mirar dentro.
-
-```bash
-# App + métricas (Prometheus, Grafana, cAdvisor, node-exporter)
-docker compose -f compose.yaml -f compose.observability.yaml up -d --build
-
-# App + logs (Elasticsearch, Kibana, Fluent Bit)
-docker compose -f compose.yaml -f compose.logging.yaml up -d --build
-
-# Todo junto
+# todo: app + métricas + logs
 docker compose -f compose.yaml -f compose.observability.yaml -f compose.logging.yaml up -d --build
 ```
 
-Para no repetir la lista de ficheros en cada comando:
+Grafana en `:3000` (dashboards ya provisionados) y Kibana en `:5601`.
 
-```bash
-export COMPOSE_FILE=compose.yaml:compose.observability.yaml:compose.logging.yaml
-docker compose up -d --build     # ya coge los tres
-```
+> ⚠️ Las **métricas por contenedor** (cAdvisor) y la **recolección de logs** (Fluent Bit) requieren Docker sobre **Linux nativo**: en Docker Desktop (Windows/WSL2 y macOS) arrancan sin errores pero no recogen datos, porque el daemon corre aislado en su propia VM. Yo desarrollo en Windows y valido la observabilidad en una VM Ubuntu.
 
-| Servicio | URL | Notas |
-|---|---|---|
-| API | http://localhost:8000 | métricas en `/metrics` |
-| Prometheus | http://localhost:9090 | pestaña *Status → Targets* para ver los objetivos |
-| Grafana | http://localhost:3000 | `admin`/`admin`; datasource y dashboards ya provisionados |
-| cAdvisor | http://localhost:8080 | métricas por contenedor |
-| Elasticsearch | http://localhost:9200 | `/_cat/indices?v` lista los índices de logs |
-| Kibana | http://localhost:5601 | crear una *data view* con el patrón `docker-lab-*` |
-
-> Importante: hay que **bajar el stack con el mismo conjunto de `-f`** con el que se subió. Si no, Compose intenta borrar redes que otros servicios siguen usando y falla con *"network is still in use"*.
+📖 **[Guía de uso completa](docs/uso.md)** — probar la API paso a paso, arrancar cada stack por separado, puertos y accesos, consultas KQL en Kibana, limitaciones por entorno y notas de recursos.
 
 > Estado actual: **M0–M3 completados** — API contenerizada con PostgreSQL, sesiones en Redis y autenticación (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2) y observabilidad completa: métricas con Prometheus + Grafana y logs con Elasticsearch + Kibana + Fluent Bit, con dashboards como código (M3). El resto (multiservicio, Kubernetes, IaC en AWS) llega después, según el [ROADMAP](ROADMAP.md).
 
@@ -213,11 +176,27 @@ level: ERROR
 
 ![Logs de la API en Kibana, filtrados por método](docs/img/kibana-logs-get.png)
 
-> Nota de entorno: la recolección con `tail` requiere Docker sobre **Linux nativo**. En Docker Desktop/WSL2 los ficheros de log viven en la VM interna de Docker y no son accesibles por bind mount, así que valido esta parte en una VM Ubuntu.
+---
 
 ## Roadmap
 
 Consulta el plan completo y el estado de cada módulo en **[ROADMAP.md](ROADMAP.md)**.
+
+---
+
+## Decisiones de arquitectura (ADR)
+
+Cada decisión técnica relevante queda registrada con su contexto, las alternativas que descarté y las consecuencias que acepto. Es la parte del repo que mejor explica *por qué* está construido así:
+
+| ADR | Decisión |
+|---|---|
+| [0001](docs/adr/0001-arquitectura-y-alcance-inicial.md) | Arquitectura y alcance inicial |
+| [0002](docs/adr/0002-punto-de-montaje-postgres.md) | Punto de montaje del volumen de PostgreSQL |
+| [0003](docs/adr/0003-autenticacion-por-sesion.md) | Autenticación por sesión sobre Redis |
+| [0004](docs/adr/0004-seguridad-de-la-imagen.md) | Seguridad de la imagen (y por qué volví de distroless a slim) |
+| [0005](docs/adr/0005-cicd-imagenes-github-actions.md) | CI/CD de imágenes con GitHub Actions y GHCR |
+| [0006](docs/adr/0006-observabilidad-prometheus-grafana.md) | Observabilidad con Prometheus + Grafana (host, contenedor y app) |
+| [0007](docs/adr/0007-logs-elastic-stack.md) | Centralización de logs con el Elastic Stack |
 
 ---
 
