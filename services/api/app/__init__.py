@@ -8,10 +8,15 @@ from prometheus_flask_exporter import PrometheusMetrics
 from sqlalchemy import URL
 
 from .extensions import db, sess
+from .logging_config import configurar_logging
 
 
 def create_app():
     app = Flask(__name__)
+
+    # ---------- Logging estructurado (JSON a stdout) ----------
+    # Se activa lo primero para que cualquier log posterior ya salga en JSON.
+    configurar_logging(app)
 
     # ---------- Base de datos (PostgreSQL) ----------
     user = os.environ["DB_USER"]
