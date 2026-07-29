@@ -17,7 +17,8 @@ El recorrido completo:
    días y momentos de la semana.
 3. Puedo **editarlo todo a mano**: crear mis propias recetas y planes sin IA.
 4. Genero la **lista de la compra**, indicando para cuántas semanas la quiero.
-5. Pido un **análisis** del plan contra mi objetivo.
+5. Pido un **análisis**: la IA revisa un plan concreto y valora si encaja con mi
+   perfil y mi objetivo, y qué ajustaría.
 
 Los pasos 2 y 5 son lentos (hablan con un modelo de lenguaje), así que van por
 cola y los procesa un worker. El resto son operaciones inmediatas de la API.
@@ -182,7 +183,28 @@ los del etiquetado acota la tabla sin perder nada relevante para planificar diet
 suma; JSON para la cola larga que solo se muestra. Evita una tabla de doscientas
 columnas casi vacías sin tirar datos que la API ya da.
 
-### 3.9 La IA compone; el catálogo aporta los números
+### 3.9 El usuario no introduce objetivos numéricos
+
+**Decisión:** el usuario declara su objetivo con una etiqueta (`perder_grasa`,
+`mantener`, `ganar_musculo`) y sus datos físicos. **No introduce calorías ni
+macros objetivo**: es la IA quien los determina a partir del perfil.
+
+**Por qué:** la mayoría de la gente no sabe cuántas calorías necesita, y pedirle
+un número sería trasladarle un problema que no puede resolver.
+
+**Qué implica aceptar:** esas cifras son **estimaciones del modelo**, no el
+resultado de una fórmula validada. La interfaz debe presentarlas como orientación
+y no como una pauta médica.
+
+**El análisis, entonces,** es la revisión que hace la IA de un plan y solo se
+ofrece para los planes creados **a mano** (`origen = manual`). Pedirle que revise
+un plan que ha generado ella misma sería preguntarle si hizo bien su trabajo: por
+construcción diría que sí, y no aportaría nada.
+
+Su utilidad real es la de una segunda opinión sobre lo que ha montado el usuario:
+si encaja con su perfil y su objetivo, y qué ajustaría.
+
+### 3.10 La IA compone; el catálogo aporta los números
 
 Un modelo de lenguaje es bueno decidiendo qué pega con qué y cómo repartir las
 comidas de la semana. Es malo dando cifras exactas: si le pregunto las calorías
@@ -201,7 +223,7 @@ pesos del modelo con datos propios: caro, con GPU y conjuntos de datos grandes, 
 sirve para cambiar su comportamiento, no para darle información. Aquí basta con
 instrucciones en el *prompt* y el catálogo como contexto.
 
-### 3.10 Origen de los datos nutricionales: USDA + semilla propia
+### 3.11 Origen de los datos nutricionales: USDA + semilla propia
 
 **Decisión:** una tabla `Alimento` propia que es la fuente de la verdad, sembrada
 con 30-50 alimentos básicos versionados en el repo, y ampliable bajo demanda
@@ -235,7 +257,7 @@ el catálogo, el worker lo busca en USDA y, si hace falta, usa el propio modelo
 para desambiguar entre los resultados. Como ocurre dentro del worker, que ya es
 asíncrono, no añade latencia visible.
 
-### 3.11 El modelo no se parece a la API externa
+### 3.12 El modelo no se parece a la API externa
 
 **Decisión:** la correspondencia entre los campos de USDA y los del catálogo vive
 en **un único módulo traductor**, no repartida por el código.
@@ -245,11 +267,33 @@ filtraría por toda la aplicación. Con un traductor, un cambio de formato se
 resuelve en un fichero. Y si algún día quisiera añadir Open Food Facts como
 segunda fuente, sería escribir otro traductor sin tocar el modelo.
 
-> **Pendiente:** los identificadores y nombres exactos de los nutrientes de USDA
-> hay que sacarlos de su documentación al implementar el traductor. No están
-> decididos en este documento.
+**Resuelto en `app/catalogo/usda.py`.** Los identificadores se obtuvieron
+consultando la API real, no de memoria. Dos detalles que solo aparecen al
+ejecutarla:
 
-### 3.12 Cómo se protege el catálogo
+- **El emparejamiento va por identificador, nunca por nombre.** `1008` es
+  "Energy" en kilocalorías y `1062` es "Energy" en kilojulios: emparejar por el
+  texto habría metido kilojulios en la columna de calorías, un error de un factor
+  de 4,18 en todo el catálogo y difícil de detectar.
+- **Cada campo tiene una cadena de identificadores de respaldo**, porque Foundation
+  y SR Legacy no publican los mismos nutrientes. Los hidratos, por ejemplo,
+  alternan entre "por diferencia" y "por sumatorio".
+
+La sal se calcula del sodio, que USDA da en miligramos:
+`sal_g = sodio_mg × 2,5 ÷ 1000`. El factor 2,5 es la proporción entre los pesos
+moleculares del cloruro sódico y del sodio, redondeada según el reglamento de
+etiquetado.
+
+La clave de la API viaja en la cabecera `X-Api-Key` y no como parámetro de la URL,
+para que no acabe registrada en logs de acceso, proxies ni trazas.
+
+**Si a un alimento le faltan los cuatro macros básicos, se descarta** en lugar de
+guardar una fila incompleta. Esa regla se ganó el sueldo sola: la ficha de USDA
+del aceite de oliva virgen extra existe pero solo publica ácidos grasos, sin
+calorías ni proteínas, así que sin ella el catálogo habría tenido un aceite de
+oliva con cero calorías.
+
+### 3.13 Cómo se protege el catálogo
 
 `Alimento.origen` toma tres valores:
 
@@ -263,7 +307,7 @@ Al editar un alimento pasa a ser `manual`, así que **queda protegido por el mer
 hecho de haberlo tocado**. No hace falta revisar el catálogo alimento por alimento:
 solo se corrige lo que chirría, y corregirlo ya lo blinda.
 
-### 3.13 Por qué existe la semilla
+### 3.14 Por qué existe la semilla
 
 Los datos de semilla se cargan al desplegar si la tabla está vacía. Con ellos, un
 `docker compose up` desde cero deja la aplicación **funcionando sin depender de
@@ -319,4 +363,7 @@ API responde en milisegundos con un identificador y el worker procesa después.
 - **Cómo se despliega el modelo en la nube**: en local, Ollama con GPU; en AWS las
   instancias con GPU son caras, así que probablemente un servicio gestionado. Esa
   diferencia entre entorno local y nube se decide en el módulo de IaC.
-- **La correspondencia exacta de campos con la API de USDA** (ver 3.11).
+- **Búsqueda sin acentos**: resuelta con una columna `nombre_normalizado`
+  mantenida por el ORM en cada escritura, en lugar de la extensión `unaccent` de
+  PostgreSQL. La columna es portable a cualquier base de datos y no exige instalar
+  nada en el servidor; a cambio ocupa espacio. Decisión revisable.

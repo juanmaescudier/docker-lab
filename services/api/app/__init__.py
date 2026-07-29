@@ -67,12 +67,19 @@ def create_app():
     from .users.routes import users_bp
     from .users.auth import auth_bp
     from .analisis.routes import analisis_bp
+    from .catalogo.routes import catalogo_bp
     app.register_blueprint(users_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(analisis_bp)
+    app.register_blueprint(catalogo_bp)
 
     # Crea las tablas que falten. Pendiente: migraciones con Alembic.
     with app.app_context():
         db.create_all()
+
+    # Solo si la tabla de alimentos está vacía: así un despliegue desde cero
+    # arranca con catálogo sin depender de USDA (3.14).
+    from .catalogo.semilla import cargar_semilla
+    cargar_semilla(app)
 
     return app
