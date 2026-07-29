@@ -9,13 +9,13 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3fb950)
-![Estado](https://img.shields.io/badge/estado-M3_observabilidad-3fb950)
+![Estado](https://img.shields.io/badge/estado-M0--M3_completados-3fb950)
 
 Laboratorio de contenedores construido de forma progresiva como proyecto de portfolio para perfiles **Cloud / DevOps Junior**. Empieza siendo un único servicio y evoluciona hasta un sistema multiservicio orquestado, observado y desplegado con CI/CD e IaC. El objetivo no es académico: es **demostrar competencias prácticas** y poder **defender cada decisión técnica** en una entrevista.
 
 ![Arquitectura del laboratorio (M0)](docs/img/architecture.svg)
 
-> **Estado:** en construcción. **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR (M2), y observabilidad completa con sus dos pilares: **métricas** (Prometheus + Grafana, en tres capas) y **logs** (Elasticsearch + Kibana + Fluent Bit) (M3). Lo siguiente, según el [ROADMAP](ROADMAP.md): multiservicio, Kubernetes e IaC en AWS.
+> **Estado:** en construcción. **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR más el corte a multiservicio con cola y worker (M2), y observabilidad completa con sus dos pilares: **métricas** (Prometheus + Grafana, en tres capas) y **logs** (Elasticsearch + Kibana + Fluent Bit) (M3). Lo siguiente, según el [ROADMAP](ROADMAP.md): Kubernetes e IaC en AWS.
 
 ---
 
@@ -48,13 +48,16 @@ No es una re-implementación de aquel laboratorio en Docker. Es un proyecto nuev
 - **Seguridad de contenedores:** escaneo de vulnerabilidades, imágenes mínimas y gestión de secretos fuera del código.
 - **CI/CD de imágenes:** pipelines que construyen, escanean y publican imágenes automáticamente.
 - **Observabilidad:** métricas y dashboards de los contenedores con Prometheus y Grafana.
+- **Arquitectura asíncrona:** cola de trabajos, worker que escala por separado y migraciones de esquema versionadas.
 - **Orquestación:** migración de Docker Compose a Kubernetes en un clúster local.
 
 ---
 
 ## La aplicación
 
-El núcleo es una **API en Python (Flask)** con una **base de datos (PostgreSQL)** y una **cache (Redis)**. Arranca como un servicio único y, más adelante, la parto en varios servicios (API + worker + cola) para que la orquestación tenga sentido real.
+El núcleo es una **API en Python (Flask)** con **PostgreSQL** y **Redis**, partida en dos servicios: la API responde en milisegundos y delega el trabajo lento en una **cola** que consume un **worker** aparte. Ese corte es lo que hace que la orquestación y el escalado tengan sentido real.
+
+El diseño del dominio, con el modelo de entidades y las decisiones razonadas, está en **[docs/diseno-dominio.md](docs/diseno-dominio.md)**.
 
 Elegí Flask a propósito: el foco de este laboratorio son los **contenedores**, no la aplicación. Mantengo la app simple para poder concentrarme en la infraestructura.
 
@@ -76,9 +79,11 @@ El detalle completo, con las decisiones técnicas justificadas y los criterios d
 
 | Área | Tecnología |
 |------|------------|
-| Aplicación | Python / Flask |
+| Aplicación | Python / Flask + gunicorn |
+| Migraciones | Alembic |
+| Cola y trabajos en segundo plano | Redis + worker propio |
 | Base de datos | PostgreSQL |
-| Cache / cola | Redis |
+| Sesiones | Redis |
 | Orquestación local | Docker Compose → Kubernetes (k3d/kind) |
 | Registry | GitHub Container Registry (GHCR) |
 | CI/CD | GitHub Actions |
@@ -95,16 +100,18 @@ docker-lab/
 ├── README.md                     # Este archivo
 ├── ROADMAP.md                    # Diseño y plan por módulos
 ├── LICENSE
-├── compose.yaml                  # Stack base: API + Postgres + Redis
+├── compose.yaml                  # Stack base: API + worker + Postgres + 2 Redis + migraciones
 ├── compose.observability.yaml    # Métricas: Prometheus, Grafana, cAdvisor, node-exporter
 ├── compose.logging.yaml          # Logs: Elasticsearch, Kibana, Fluent Bit
 ├── .env.example                  # Plantilla de variables de entorno
 ├── .github/workflows/            # CI: build → escaneo con Trivy → push a GHCR
 ├── docs/
 │   ├── adr/                      # Decisiones de arquitectura (ADR)
+│   ├── diseno-dominio.md         # Modelo de entidades y decisiones de diseño
 │   └── img/                      # Diagramas y capturas
 ├── services/
-│   └── api/                      # Servicio Flask: Dockerfile + código de la app
+│   ├── api/                      # Servicio Flask: Dockerfile, código y migraciones
+│   └── worker/                   # Consumidor de la cola: sin HTTP, imagen aparte
 └── infra/
     ├── prometheus/               # Configuración de scrape
     ├── grafana/                  # Datasource y dashboards como código
@@ -197,6 +204,7 @@ Cada decisión técnica relevante queda registrada con su contexto, las alternat
 | [0005](docs/adr/0005-cicd-imagenes-github-actions.md) | CI/CD de imágenes con GitHub Actions y GHCR |
 | [0006](docs/adr/0006-observabilidad-prometheus-grafana.md) | Observabilidad con Prometheus + Grafana (host, contenedor y app) |
 | [0007](docs/adr/0007-logs-elastic-stack.md) | Centralización de logs con el Elastic Stack |
+| [0008](docs/adr/0008-corte-multiservicio-cola-y-worker.md) | Corte a multiservicio con cola y worker, y migraciones con Alembic |
 
 ---
 

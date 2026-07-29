@@ -35,12 +35,12 @@ aprendizaje de infraestructura, se queda fuera o es un *stub*.
 | Entidad | Qué representa |
 |---|---|
 | `User` | Quién soy: datos físicos, objetivo y preferencias |
-| `Alimento` | Un alimento concreto con sus valores nutricionales por 100 g |
-| `Receta` | Un plato, con sus pasos y método de cocción |
-| `IngredienteReceta` | Cuántos gramos de un alimento lleva una receta |
+| `Food` | Un alimento concreto con sus valores nutricionales por 100 g |
+| `Recipe` | Un plato, con sus pasos y método de cocción |
+| `RecipeIngredient` | Cuántos gramos de un alimento lleva una receta |
 | `Plan` | Una plantilla semanal de comidas de un usuario |
-| `ComidaPlanificada` | Una receta en un día de la semana y momento concretos |
-| `Analisis` | Un trabajo asíncrono y su resultado |
+| `PlannedMeal` | Una receta en un día de la semana y momento concretos |
+| `Analysis` | Un trabajo asíncrono y su resultado |
 
 La lista de la compra **no es una entidad**: se calcula.
 
@@ -53,9 +53,9 @@ La lista de la compra **no es una entidad**: se calcula.
 Así es como funciona una pauta de nutricionista en la vida real: te dan una semana
 tipo y la repites hasta que te la cambian.
 
-**Decisión:** `Plan` no tiene fecha de fin. Tiene un campo `activo`, y solo puede
-haber un plan activo por usuario. `ComidaPlanificada` guarda `dia_semana`
-(`lunes`…`domingo`), no una fecha del calendario.
+**Decisión:** `Plan` no tiene fecha de fin. Tiene un campo `active`, y solo puede
+haber un plan activo por usuario. `PlannedMeal` guarda `day_of_week`
+(`monday`…`sunday`), no una fecha del calendario.
 
 **Consecuencias:** los planes anteriores quedan archivados como histórico de
 pautas, igual que guardarías las dietas antiguas. Y la lista de la compra se
@@ -88,8 +88,8 @@ en crudo, en cada pantalla donde aparezcan. No puede quedar implícito.
 con piel y el pollo asado son distintos. Si el catálogo tuviera una única fila
 `pollo`, mentiría en casi todas las recetas.
 
-**Decisión:** cada fila de `Alimento` es un alimento **específico y medible**
-("pechuga de pollo, cruda"), y la columna `categoria` agrupa las variantes.
+**Decisión:** cada fila de `Food` es un alimento **específico y medible**
+("pechuga de pollo, cruda"), y la columna `category` agrupa las variantes.
 
 **Consecuencia:** "pollo" pasa a ser un **criterio de búsqueda**, no un registro.
 Tanto el usuario como la IA ven las variantes disponibles con sus valores y eligen
@@ -97,42 +97,42 @@ la que corresponde a esa receta.
 
 ### 3.4 La cantidad vive en la relación, no en el alimento
 
-`Alimento` guarda los valores **por 100 g**, que son fijos y universales. Los 200 g
+`Food` guarda los valores **por 100 g**, que son fijos y universales. Los 200 g
 de pollo de una receta concreta pertenecen a esa receta.
 
 Como una receta lleva varios alimentos y un alimento aparece en varias recetas, es
 una relación **muchos a muchos**; y como además lleva un dato propio (los gramos),
-no basta con una tabla de unión: es una entidad, `IngredienteReceta`.
+no basta con una tabla de unión: es una entidad, `RecipeIngredient`.
 
 **Por qué importa:** los valores del pollo se guardan una sola vez. Si mañana los
 corrijo, toco una fila y todas las recetas quedan corregidas. Si los hubiera
 copiado dentro de cada receta, tendría que actualizar miles de filas y acabarían
 divergiendo entre sí.
 
-**Sobre el tamaño:** `IngredienteReceta` crece con las recetas, pero cada fila son
+**Sobre el tamaño:** `RecipeIngredient` crece con las recetas, pero cada fila son
 dos enteros y un decimal. Mil recetas de seis ingredientes son seis mil filas.
-`Alimento`, en cambio, se mantiene acotado: los alimentos del mundo son finitos.
+`Food`, en cambio, se mantiene acotado: los alimentos del mundo son finitos.
 
 ### 3.5 Guardar el dato estable, derivar el volátil
 
 Ni la **edad** ni el **IMC** se guardan en la base de datos.
 
-- La edad se calcula desde `fecha_nacimiento`. Guardar `edad = 34` sería falso
+- La edad se calcula desde `birth_date`. Guardar `edad = 34` sería falso
   dentro de un año y nadie lo actualizaría.
-- El IMC se calcula desde `peso_kg` y `altura_cm`. Guardarlo quedaría desfasado en
+- El IMC se calcula desde `weight_kg` y `height_cm`. Guardarlo quedaría desfasado en
   cuanto cambiara el peso.
 
 Es la misma regla en ambos casos: **se persiste el hecho que no cambia y se deriva
 el resto**. Guardar un valor derivado es garantizarse una incoherencia futura.
 
 **Sobre el IMC:** es orientativo y no distingue músculo de grasa. Por eso el
-modelo incluye también `composicion_corporal` (la percepción del propio usuario) y
+modelo incluye también `body_composition` (la percepción del propio usuario) y
 perímetros opcionales de cintura, cadera y cuello, que aportan contexto que el IMC
 por sí solo no da.
 
 ### 3.6 La lista de la compra se calcula, y admite varias semanas
 
-**Decisión:** `GET /planes/<id>/lista-compra?semanas=N` recorre las comidas del
+**Decisión:** `GET /plans/<id>/shopping-list?weeks=N` recorre las comidas del
 plan, suma los gramos por alimento y multiplica por el número de semanas.
 
 **Por qué no se guarda:** no hay tabla que mantener y la lista **nunca queda
@@ -151,8 +151,8 @@ comunicar servicios entre sí. Por eso vive aislada.
 
 ### 3.7 Listas cerradas en vez de texto libre
 
-`objetivo`, `nivel_actividad`, `composicion_corporal`, `preferencia_alimentaria`,
-`dia_semana`, `momento` y `estado` toman valores de un conjunto fijo.
+`goal`, `activity_level`, `body_composition`, `food_preference`,
+`day_of_week`, `meal_slot` y `state` toman valores de un conjunto fijo.
 
 **Por qué:** la interfaz muestra un desplegable, la base de datos no se llena de
 variantes del mismo concepto ("adelgazar", "bajar peso", "perder grasa"), y sobre
@@ -167,13 +167,13 @@ del supermercado—, y una columna JSON para todo lo demás.
 
 | Campo | |
 |---|---|
-| `energia_kcal` | |
-| `grasas_g` · `grasas_saturadas_g` | *"de las cuales saturadas"* |
-| `hidratos_g` · `azucares_g` | *"de los cuales azúcares"* |
-| `fibra_g` | |
-| `proteinas_g` | |
-| `sal_g` | |
-| `nutrientes_extra` | JSON: vitaminas, minerales, colesterol… |
+| `energy_kcal` | |
+| `fat_g` · `saturated_fat_g` | *"de las cuales saturadas"* |
+| `carbs_g` · `sugars_g` | *"de los cuales azúcares"* |
+| `fiber_g` | |
+| `protein_g` | |
+| `salt_g` | |
+| `extra_nutrients` | JSON: vitaminas, minerales, colesterol… |
 
 **Por qué esos ocho:** porque el criterio no es una opinión mía sino un estándar
 legal, y eso lo hace defendible. USDA ofrece cientos de nutrientes; quedarse con
@@ -185,8 +185,8 @@ columnas casi vacías sin tirar datos que la API ya da.
 
 ### 3.9 El usuario no introduce objetivos numéricos
 
-**Decisión:** el usuario declara su objetivo con una etiqueta (`perder_grasa`,
-`mantener`, `ganar_musculo`) y sus datos físicos. **No introduce calorías ni
+**Decisión:** el usuario declara su objetivo con una etiqueta (`lose_fat`,
+`maintain`, `gain_muscle`) y sus datos físicos. **No introduce calorías ni
 macros objetivo**: es la IA quien los determina a partir del perfil.
 
 **Por qué:** la mayoría de la gente no sabe cuántas calorías necesita, y pedirle
@@ -197,7 +197,7 @@ resultado de una fórmula validada. La interfaz debe presentarlas como orientaci
 y no como una pauta médica.
 
 **El análisis, entonces,** es la revisión que hace la IA de un plan y solo se
-ofrece para los planes creados **a mano** (`origen = manual`). Pedirle que revise
+ofrece para los planes creados **a mano** (`source = manual`). Pedirle que revise
 un plan que ha generado ella misma sería preguntarle si hizo bien su trabajo: por
 construcción diría que sí, y no aportaría nada.
 
@@ -225,7 +225,7 @@ instrucciones en el *prompt* y el catálogo como contexto.
 
 ### 3.11 Origen de los datos nutricionales: USDA + semilla propia
 
-**Decisión:** una tabla `Alimento` propia que es la fuente de la verdad, sembrada
+**Decisión:** una tabla `Food` propia que es la fuente de la verdad, sembrada
 con 30-50 alimentos básicos versionados en el repo, y ampliable bajo demanda
 consultando la API de **USDA FoodData Central**.
 
@@ -247,8 +247,8 @@ secreto que gestionar, y eso conecta con la gestión de secretos del M1, con los
 
 **El pero:** los nombres de USDA están en inglés y con nomenclatura de laboratorio
 ("Chicken, broilers or fryers, breast, meat only, raw"). Se resuelve guardando en
-`Alimento` tanto el `nombre` en español —que es lo que ven el usuario y la IA—
-como el `nombre_externo` y el `id_externo`. Todo el sistema habla español; el
+`Food` tanto el `name` en español —que es lo que ven el usuario y la IA—
+como el `external_name` y el `external_id`. Todo el sistema habla español; el
 inglés solo aparece al importar un alimento nuevo, y esa importación ocurre **una
 vez por alimento**, no una vez por receta.
 
@@ -295,7 +295,7 @@ oliva con cero calorías.
 
 ### 3.13 Cómo se protege el catálogo
 
-`Alimento.origen` toma tres valores:
+`Food.source` toma tres valores:
 
 | Origen | Significado | ¿Lo sobrescribe la API? |
 |---|---|---|
@@ -323,16 +323,16 @@ USDA ni de internet**, y las demostraciones salen siempre iguales.
 | POST | `/login` · `/logout` | Sesión | 200 · 401 |
 | GET | `/me` | Mis datos, con edad e IMC calculados | 200 · 401 |
 | PATCH · DELETE | `/users/<id>` | Editar o borrar mi usuario | 200 · 204 · 401 · 403 |
-| GET | `/alimentos?buscar=pollo` | Buscar en el catálogo | 200 |
-| POST · PATCH · DELETE | `/alimentos` | Mantener el catálogo | 201 · 400 · 401 |
-| GET · POST | `/recetas` | Listar y crear recetas | 200 · 201 · 400 |
-| GET · PATCH · DELETE | `/recetas/<id>` | Ver, editar, borrar | 200 · 204 · 404 |
-| GET · POST | `/planes` | Listar y crear planes a mano | 200 · 201 |
-| POST | `/planes/generar` | **Encola** la generación por IA | **202** |
-| GET | `/planes/<id>` | Ver el plan y su estado | 200 · 404 |
-| GET | `/planes/<id>/lista-compra?semanas=N` | Lista calculada al vuelo | 200 · 400 · 404 |
-| POST | `/analisis` | **Encola** el análisis de un plan | **202** |
-| GET | `/analisis/<id>` | Estado y resultado | 200 · 404 |
+| GET | `/foods?search=pollo` | Buscar en el catálogo | 200 |
+| POST · PATCH · DELETE | `/foods` | Mantener el catálogo | 201 · 400 · 401 |
+| GET · POST | `/recipes` | Listar y crear recetas | 200 · 201 · 400 |
+| GET · PATCH · DELETE | `/recipes/<id>` | Ver, editar, borrar | 200 · 204 · 404 |
+| GET · POST | `/plans` | Listar y crear planes a mano | 200 · 201 |
+| POST | `/plans/generate` | **Encola** la generación por IA | **202** |
+| GET | `/plans/<id>` | Ver el plan y su estado | 200 · 404 |
+| GET | `/plans/<id>/shopping-list?weeks=N` | Lista calculada al vuelo | 200 · 400 · 404 |
+| POST | `/analysis` | **Encola** el análisis de un plan | **202** |
+| GET | `/analysis/<id>` | Estado y resultado | 200 · 404 |
 | GET | `/health` · `/metrics` | Salud y métricas | 200 |
 
 Los dos endpoints que devuelven **202 Accepted** son los que encolan trabajo: la
@@ -343,10 +343,10 @@ API responde en milisegundos con un identificador y el worker procesa después.
 ## 5. Qué se queda fuera (y por qué)
 
 - **Histórico de peso.** En un producto real sería una tabla propia con la
-  evolución; aquí `peso_kg` es un campo simple. Deuda de diseño consciente: no
+  evolución; aquí `weight_kg` es un campo simple. Deuda de diseño consciente: no
   aporta aprendizaje de infraestructura.
 - **Alergias e intolerancias.** Son datos de salud, categoría especialmente
-  protegida por el RGPD. `preferencia_alimentaria` (vegetariano, vegano) sí entra
+  protegida por el RGPD. `food_preference` (vegetariano, vegano) sí entra
   porque es una elección, no un dato médico.
 - **Persistir la lista de la compra** y marcar artículos como comprados.
 - **Cálculo de necesidades calóricas con fórmulas**: es lógica de negocio pura y
@@ -363,6 +363,14 @@ API responde en milisegundos con un identificador y el worker procesa después.
 - **Cómo se despliega el modelo en la nube**: en local, Ollama con GPU; en AWS las
   instancias con GPU son caras, así que probablemente un servicio gestionado. Esa
   diferencia entre entorno local y nube se decide en el módulo de IaC.
+- **Sección de ajustes de la aplicación**: tema claro u oscuro, idioma, unidades,
+  notificaciones. Conviene separarlo del perfil nutricional: el peso y el objetivo
+  afectan al negocio, el tema visual no. La forma prevista es una columna
+  `preferencias` de tipo JSON en `User`, siguiendo el mismo criterio que
+  `extra_nutrients`: columnas fijas para lo que se consulta y se filtra, JSON para
+  la cola larga que solo se lee. Pendiente para cuando exista interfaz.
+- **Más datos de perfil**: el conjunto actual es el mínimo para que la IA pueda
+  planificar. Habrá que revisarlo con calma.
 - **Búsqueda sin acentos**: resuelta con una columna `nombre_normalizado`
   mantenida por el ORM en cada escritura, en lugar de la extensión `unaccent` de
   PostgreSQL. La columna es portable a cualquier base de datos y no exige instalar

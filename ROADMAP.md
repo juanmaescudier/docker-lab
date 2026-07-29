@@ -1,8 +1,8 @@
 # Docker Lab — Diseño y roadmap
 
 > Mi laboratorio de contenedores de nivel portfolio para un rol **Cloud / DevOps Junior**.
-> Última actualización: 26 de julio de 2026.
-> **Estado:** M0, M1 y M3 completados. De M2 tengo hecha la parte de CI/CD; el corte a multiservicio (API + worker + cola) queda pendiente y es lo siguiente que abordo, antes de Kubernetes.
+> Última actualización: 29 de julio de 2026.
+> **Estado:** M0, M1, M2 y M3 completados. El sistema es ya multiservicio, observado y con migraciones de esquema. Lo siguiente es Kubernetes (M4) y después la IaC en AWS (M5).
 
 ---
 
@@ -128,7 +128,10 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **Conceptos que quiero entender:** por qué separar responsabilidades en servicios; comunicación asíncrona (cola) vs síncrona (HTTP); versionado de imágenes (semver, sha, `latest`); qué se ejecuta en CI y por qué.
 - **DoD:** un push a `main` construye, escanea y publica la imagen automáticamente; el sistema multiservicio funciona vía Compose; los tags de imagen son trazables al commit.
 - **Valor CV:** demuestra CI/CD real y diseño multiservicio, dos cosas muy buscadas.
-- **Estado: parcialmente completado.** Hecha la parte de **CI/CD** (ADR-0005): un push a `main` construye, escanea con Trivy y publica en GHCR, con tags trazables al commit y sin publicar nada que no haya pasado el escaneo. **Pendiente el corte a multiservicio** (API + worker + cola): decidí adelantar la observabilidad (M3) para tener visibilidad *antes* de añadir más piezas móviles, y hago el corte justo después. Aprendizaje extra: fijo las actions de terceros por SHA de commit y no por tag, a raíz del secuestro de tags de `trivy-action` en marzo de 2026.
+- **Estado: completado.** El **CI/CD** (ADR-0005): un push a `main` construye, escanea con Trivy y publica en GHCR, con tags trazables al commit y sin publicar nada que no haya pasado el escaneo. Aprendizaje extra: fijo las actions de terceros por SHA de commit y no por tag, a raíz del secuestro de tags de `trivy-action` en marzo de 2026.
+- El **corte a multiservicio** (ADR-0008) lo hice después de M3, a propósito: quería tener observabilidad *antes* de añadir piezas móviles, y acerté — el worker apareció en los dashboards y en Kibana sin tocar nada. Partí por **modo de ejecución** (API + cola + worker) y no por dominio: los dominios siguen siendo módulos dentro de la API, que es lo que hoy se recomienda para empezar. La cola es Redis a pelo (`LPUSH`/`BRPOP`) para entender el mecanismo antes de esconderlo tras Celery.
+- Lo que más me enseñó: que `BRPOP` **borra el mensaje al entregarlo**, así que si el worker muere a mitad el trabajo se pierde en silencio. Verlo es lo que justifica migrar a Celery, en vez de usarlo porque sí.
+- **Pendiente menor:** el pipeline solo construye la imagen de la API; falta la del worker.
 
 ### M3 — Observabilidad de contenedores (los dos pilares)
 La observabilidad tiene dos pilares que **no se pisan**: métricas (números en el tiempo) y logs (texto). Los abordo en ese orden.
