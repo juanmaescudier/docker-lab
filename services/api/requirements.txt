@@ -7,3 +7,6 @@ psycopg[binary]==3.2.9
 Flask-Session==0.8.0
 redis==5.2.1
 prometheus-flask-exporter==0.23.2
+# Migraciones de esquema. Se ejecuta a mano (alembic upgrade head), pero va en la
+# imagen para poder lanzarlo dentro del contenedor y con las mismas versiones.
+alembic==1.16.5

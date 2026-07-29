@@ -22,23 +22,26 @@ logging.basicConfig(
 )
 log = logging.getLogger("worker")
 
-COLA_ANALISIS = "cola:analisis"
+# Contrato con la API: el nombre de la lista y el campo 'type' del mensaje tienen
+# que coincidir exactamente con los de app/queue.py, o dejan de entenderse.
+ANALYSIS_QUEUE = "queue:analysis"
+JOB_NUTRITIONAL_ANALYSIS = "nutritional_analysis"
 
-_parar = False
+_stop = False
 
 
-def _manejar_senal(signum, frame):
+def _handle_signal(signum, frame):
     """Marca la parada para terminar el trabajo en curso antes de salir."""
-    global _parar
+    global _stop
     log.info("recibida señal %s: termino el trabajo actual y salgo", signum)
-    _parar = True
+    _stop = True
 
 
-signal.signal(signal.SIGTERM, _manejar_senal)
-signal.signal(signal.SIGINT, _manejar_senal)
+signal.signal(signal.SIGTERM, _handle_signal)
+signal.signal(signal.SIGINT, _handle_signal)
 
 
-def conectar_redis():
+def connect_redis():
     return redis.Redis(
         host=os.environ["QUEUE_REDIS_HOST"],
         port=int(os.environ.get("QUEUE_REDIS_PORT", "6379")),
@@ -46,7 +49,7 @@ def conectar_redis():
     )
 
 
-def conectar_postgres():
+def connect_postgres():
     # autocommit para que los cambios de estado sean visibles de inmediato
     # para la API, sin esperar al final de una transacción.
     return psycopg.connect(
@@ -60,131 +63,131 @@ def conectar_postgres():
 
 
 # Marcador de posición hasta integrar el modelo de lenguaje.
-CALORIAS_POR_100G = {
+KCAL_PER_100G = {
     "manzana": 52, "platano": 89, "pollo": 165, "arroz": 130,
     "huevo": 155, "salmon": 208, "pan": 265, "leche": 42,
     "pasta": 131, "atun": 132, "aguacate": 160, "yogur": 59,
 }
 
 
-def analizar_nutricion(entrada):
+def analyze_nutrition(job_input):
     """Calcula las calorías de una lista de alimentos.
 
     Acepta cada alimento como cadena ("manzana") o como diccionario
-    ({"nombre": "manzana", "gramos": 150}).
+    ({"name": "manzana", "grams": 150}).
     """
-    alimentos = entrada.get("alimentos", [])
+    foods = job_input.get("foods", [])
 
-    detalle = []
+    details = []
     total = 0.0
-    desconocidos = []
+    unknown = []
 
-    for item in alimentos:
+    for item in foods:
         if isinstance(item, dict):
-            nombre = str(item.get("nombre", "")).lower()
-            gramos = float(item.get("gramos", 100))
+            name = str(item.get("name", "")).lower()
+            grams = float(item.get("grams", 100))
         else:
-            nombre = str(item).lower()
-            gramos = 100.0
+            name = str(item).lower()
+            grams = 100.0
 
-        kcal_100 = CALORIAS_POR_100G.get(nombre)
+        kcal_100 = KCAL_PER_100G.get(name)
         if kcal_100 is None:
-            desconocidos.append(nombre)
+            unknown.append(name)
             continue
 
-        kcal = kcal_100 * gramos / 100
+        kcal = kcal_100 * grams / 100
         total += kcal
-        detalle.append({"nombre": nombre, "gramos": gramos, "kcal": round(kcal, 1)})
+        details.append({"name": name, "grams": grams, "kcal": round(kcal, 1)})
 
     # Latencia simulada: representa el coste de la futura llamada al modelo.
     time.sleep(float(os.environ.get("TRABAJO_SEGUNDOS", "5")))
 
     return {
-        "detalle": detalle,
-        "kcal_total": round(total, 1),
-        "alimentos_desconocidos": desconocidos,
-        "metodo": "tabla-estatica-simulada",
+        "details": details,
+        "total_kcal": round(total, 1),
+        "unknown_foods": unknown,
+        "method": "static-table-stub",
     }
 
 
-def procesar_analisis(pg, analisis_id):
+def process_analysis(pg, analysis_id):
     """Ejecuta un análisis y refleja el resultado en su fila."""
     with pg.cursor() as cur:
         # El filtro por estado evita procesar dos veces el mismo trabajo si
         # llegara duplicado a la cola.
         cur.execute(
             """
-            UPDATE analisis
-               SET estado = 'procesando',
-                   intentos = intentos + 1,
-                   actualizado_en = NOW()
-             WHERE id = %s AND estado IN ('pendiente', 'fallido')
-         RETURNING entrada
+            UPDATE analyses
+               SET state = 'processing',
+                   attempts = attempts + 1,
+                   updated_at = NOW()
+             WHERE id = %s AND state IN ('pending', 'failed')
+         RETURNING input
             """,
-            (analisis_id,),
+            (analysis_id,),
         )
-        fila = cur.fetchone()
+        row = cur.fetchone()
 
-    if fila is None:
-        log.warning("analisis %s no está pendiente, lo ignoro", analisis_id)
+    if row is None:
+        log.warning("analisis %s no está pendiente, lo ignoro", analysis_id)
         return
 
-    entrada = fila[0]
+    job_input = row[0]
 
     try:
-        resultado = analizar_nutricion(entrada)
+        result = analyze_nutrition(job_input)
     except Exception as exc:
         # Un trabajo que falla no debe detener el consumidor.
-        log.exception("analisis %s ha fallado", analisis_id)
+        log.exception("analisis %s ha fallado", analysis_id)
         with pg.cursor() as cur:
             cur.execute(
-                "UPDATE analisis SET estado='fallido', error=%s, actualizado_en=NOW() WHERE id=%s",
-                (str(exc), analisis_id),
+                "UPDATE analyses SET state='failed', error=%s, updated_at=NOW() WHERE id=%s",
+                (str(exc), analysis_id),
             )
         return
 
     with pg.cursor() as cur:
         cur.execute(
             """
-            UPDATE analisis
-               SET estado = 'completado',
-                   resultado = %s,
+            UPDATE analyses
+               SET state = 'completed',
+                   result = %s,
                    error = NULL,
-                   actualizado_en = NOW()
+                   updated_at = NOW()
              WHERE id = %s
             """,
-            (psycopg.types.json.Json(resultado), analisis_id),
+            (psycopg.types.json.Json(result), analysis_id),
         )
 
-    log.info("analisis %s completado: %s kcal", analisis_id, resultado["kcal_total"])
+    log.info("analisis %s completado: %s kcal", analysis_id, result["total_kcal"])
 
 
 def main():
-    r = conectar_redis()
-    pg = conectar_postgres()
-    log.info("worker arrancado, esperando trabajos en %s", COLA_ANALISIS)
+    r = connect_redis()
+    pg = connect_postgres()
+    log.info("worker arrancado, esperando trabajos en %s", ANALYSIS_QUEUE)
 
-    while not _parar:
+    while not _stop:
         # El timeout permite revisar la bandera de parada periódicamente;
         # con espera indefinida el contenedor no podría apagarse limpiamente.
-        item = r.brpop(COLA_ANALISIS, timeout=5)
+        item = r.brpop(ANALYSIS_QUEUE, timeout=5)
         if item is None:
             continue
 
-        _, mensaje = item
+        _, message = item
 
         try:
-            job = json.loads(mensaje)
+            job = json.loads(message)
         except json.JSONDecodeError:
-            log.error("mensaje ilegible, lo descarto: %r", mensaje)
+            log.error("mensaje ilegible, lo descarto: %r", message)
             continue
 
-        tipo = job.get("tipo")
+        job_type = job.get("type")
 
-        if tipo == "analisis_nutricional":
-            procesar_analisis(pg, job["analisis_id"])
+        if job_type == JOB_NUTRITIONAL_ANALYSIS:
+            process_analysis(pg, job["analysis_id"])
         else:
-            log.error("tipo de trabajo desconocido: %s", tipo)
+            log.error("tipo de trabajo desconocido: %s", job_type)
 
     log.info("worker detenido limpiamente")
     pg.close()

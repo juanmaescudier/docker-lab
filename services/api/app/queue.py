@@ -10,34 +10,34 @@ import os
 import redis
 
 # Contrato con el worker: ambos deben usar exactamente este nombre.
-COLA_ANALISIS = "cola:analisis"
+ANALYSIS_QUEUE = "queue:analysis"
 
-_cliente = None
+_client = None
 
 
-def get_cola():
+def get_queue():
     """Devuelve el cliente de Redis de la cola, creándolo la primera vez."""
-    global _cliente
-    if _cliente is None:
-        _cliente = redis.Redis(
+    global _client
+    if _client is None:
+        _client = redis.Redis(
             host=os.environ["QUEUE_REDIS_HOST"],
             port=int(os.environ.get("QUEUE_REDIS_PORT", "6379")),
             decode_responses=True,
         )
-    return _cliente
+    return _client
 
 
-def encolar(tipo, payload):
+def enqueue(job_type, payload):
     """Añade un trabajo a la cola.
 
-    El campo 'tipo' permite que un mismo worker atienda varias clases de trabajo.
+    El campo 'type' permite que un mismo worker atienda varias clases de trabajo.
     """
-    mensaje = json.dumps({"tipo": tipo, **payload})
+    message = json.dumps({"type": job_type, **payload})
 
     # LPUSH empuja por la izquierda; el worker saca por la derecha (FIFO).
-    get_cola().lpush(COLA_ANALISIS, mensaje)
+    get_queue().lpush(ANALYSIS_QUEUE, message)
 
 
-def longitud_cola():
+def queue_length():
     """Número de trabajos pendientes."""
-    return get_cola().llen(COLA_ANALISIS)
+    return get_queue().llen(ANALYSIS_QUEUE)

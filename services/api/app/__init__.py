@@ -5,34 +5,22 @@ from datetime import timedelta
 import redis
 from flask import Flask, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
-from sqlalchemy import URL
 
+from .config import database_url
 from .extensions import db, sess
-from .logging_config import configurar_logging
+from .logging_config import configure_logging
 
 
 def create_app():
     app = Flask(__name__)
 
     # Lo primero, para que cualquier log posterior salga ya en JSON.
-    configurar_logging(app)
+    configure_logging(app)
 
     # ---------- Base de datos (PostgreSQL) ----------
-    user = os.environ["DB_USER"]
-    password = os.environ["DB_PASSWORD"]
-    host = os.environ["DB_HOST"]
-    port = os.environ.get("DB_PORT", "5432")
-    name = os.environ["DB_NAME"]
-
-    # URL.create() escapa los caracteres especiales de la contraseña automáticamente.
-    app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
-        drivername="postgresql+psycopg",
-        username=user,
-        password=password,
-        host=host,
-        port=int(port),
-        database=name,
-    )
+    # La misma función que usa Alembic: una sola definición de la conexión, para
+    # que migraciones y aplicación no puedan apuntar a bases de datos distintas.
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url()
     db.init_app(app)
 
     # ---------- Sesiones (Flask-Session sobre Redis) ----------
@@ -66,20 +54,24 @@ def create_app():
     # ---------- Blueprints (un módulo por dominio) ----------
     from .users.routes import users_bp
     from .users.auth import auth_bp
-    from .analisis.routes import analisis_bp
-    from .catalogo.routes import catalogo_bp
+    from .analysis.routes import analysis_bp
+    from .catalog.routes import catalog_bp
+    from .recipes.routes import recipes_bp
+    from .plans.routes import plans_bp
     app.register_blueprint(users_bp)
     app.register_blueprint(auth_bp)
-    app.register_blueprint(analisis_bp)
-    app.register_blueprint(catalogo_bp)
+    app.register_blueprint(analysis_bp)
+    app.register_blueprint(catalog_bp)
+    app.register_blueprint(recipes_bp)
+    app.register_blueprint(plans_bp)
 
-    # Crea las tablas que falten. Pendiente: migraciones con Alembic.
-    with app.app_context():
-        db.create_all()
-
-    # Solo si la tabla de alimentos está vacía: así un despliegue desde cero
-    # arranca con catálogo sin depender de USDA (3.14).
-    from .catalogo.semilla import cargar_semilla
-    cargar_semilla(app)
+    # El esquema lo crea Alembic (`alembic upgrade head`), no la aplicación:
+    # `db.create_all()` solo añadía tablas nuevas y nunca modificaba las
+    # existentes, así que no servía para hacer evolucionar el modelo.
+    #
+    # La semilla del catálogo sí se carga aquí: son DATOS, no esquema, y deben
+    # poder recargarse sin inventar una migración (3.14).
+    from .catalog.seed import load_seed
+    load_seed(app)
 
     return app

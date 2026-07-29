@@ -8,6 +8,7 @@ networks:
 services:
   nutriapp:
     build: ./services/api
+    image: docker-lab-api
     ports:
       - "8000:8000"
     environment:
@@ -29,6 +30,8 @@ services:
         condition: service_healthy
       redis-queue:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - frontend
       - backend
@@ -43,12 +46,14 @@ services:
       - DB_NAME=${DB_NAME}
       - QUEUE_REDIS_HOST=${QUEUE_REDIS_HOST}
       - QUEUE_REDIS_PORT=${QUEUE_REDIS_PORT}
-      - TRABAJO_SEGUNDOS=${TRABAJO_SEGUNDOS}
+      - TRABAJO_SEGUNDOS=${TRABAJO_SEGUNDOS:-5}
     depends_on:
       redis-queue:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - backend
@@ -88,6 +93,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    build: ./services/api
+    image: docker-lab-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+    restart: "no"
+    networks:
+      - backend
 
 volumes:
   pgdata:

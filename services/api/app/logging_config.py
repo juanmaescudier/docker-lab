@@ -41,7 +41,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 
-def configurar_logging(app):
+def configure_logging(app):
     """Configura la salida JSON y registra un log por petición."""
 
     handler = logging.StreamHandler(sys.stdout)
@@ -54,40 +54,40 @@ def configurar_logging(app):
     app.logger.propagate = False
 
     @app.before_request
-    def _iniciar_traza():
+    def _start_trace():
         # perf_counter es monótono: no le afectan los ajustes de reloj.
-        g._inicio = time.perf_counter()
+        g._start = time.perf_counter()
         g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
 
     @app.after_request
-    def _registrar_peticion(response):
-        duracion_ms = (time.perf_counter() - getattr(g, "_inicio", 0)) * 1000
+    def _log_request(response):
+        duration_ms = (time.perf_counter() - getattr(g, "_start", 0)) * 1000
 
-        campos = {
+        fields = {
             "request_id": getattr(g, "request_id", None),
             "method": request.method,
             "path": request.path,
             "status": response.status_code,
-            "duration_ms": round(duracion_ms, 2),
+            "duration_ms": round(duration_ms, 2),
             "remote_addr": request.remote_addr,
             "user_agent": request.headers.get("User-Agent"),
         }
 
         # El nivel se deriva del resultado para poder filtrar por level en Kibana.
         if response.status_code >= 500:
-            nivel_log = logging.ERROR
+            log_level = logging.ERROR
         elif response.status_code >= 400:
-            nivel_log = logging.WARNING
+            log_level = logging.WARNING
         else:
-            nivel_log = logging.INFO
+            log_level = logging.INFO
 
-        app.logger.log(nivel_log, "peticion", extra={"extra_fields": campos})
+        app.logger.log(log_level, "request", extra={"extra_fields": fields})
 
         response.headers["X-Request-ID"] = getattr(g, "request_id", "")
         return response
 
     @app.errorhandler(Exception)
-    def _registrar_excepcion(error):
+    def _log_exception(error):
         # Los errores HTTP normales (404, 401, 405...) se devuelven tal cual:
         # convertirlos aquí los transformaría en 500.
         if isinstance(error, HTTPException):
