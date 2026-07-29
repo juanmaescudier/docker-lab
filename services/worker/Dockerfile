@@ -11,7 +11,6 @@ WORKDIR /worker
 
 ENV PYTHONUNBUFFERED=1
 
-# Instalacion de dependencias (el punto nos indica WORKDIR /code) el copy tambien es de host:cont
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

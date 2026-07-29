@@ -1,21 +1,23 @@
-<svg viewBox="0 0 980 740" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
+<svg viewBox="0 0 980 750" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d">
 <title id="t">Modelo de entidades de nutriapp</title>
-<desc id="d">Diagrama entidad-relación con las siete entidades de la aplicación: User, Plan, Analisis, ComidaPlanificada, Receta, IngredienteReceta y Alimento, indicando claves foráneas y cardinalidades.</desc>
+<desc id="d">Diagrama entidad-relación con las siete entidades: User, Plan, Analisis, ComidaPlanificada, Receta, IngredienteReceta y Alimento, con sus claves foráneas y cardinalidades.</desc>
 
 <style>
   .ttl { font: 600 16px system-ui, sans-serif; fill: #1a1a1a; }
   .sub { font: 400 11.5px system-ui, sans-serif; fill: #6b6b6b; }
   .ent { font: 600 13px system-ui, sans-serif; fill: #1a1a1a; }
-  .att { font: 400 11px ui-monospace, Menlo, Consolas, monospace; fill: #2f2f2f; }
+  .att { font: 400 10.5px ui-monospace, Menlo, Consolas, monospace; fill: #2f2f2f; }
   .fk  { fill: #7a3520; }
   .pk  { fill: #1a1a1a; font-weight: 700; }
   .car { font: 600 11px system-ui, sans-serif; fill: #6b6b6b; }
-  .rel { font: 400 10.5px system-ui, sans-serif; fill: #6b6b6b; }
+  .rel { font: 400 10px system-ui, sans-serif; fill: #6b6b6b; }
+  .relb{ font: 600 10.5px system-ui, sans-serif; fill: #6b6b6b; }
 
   .bxu { fill: #eef2f6; stroke: #7e97ae; stroke-width: 1.4; }
   .bxc { fill: #eef4ef; stroke: #7fa389; stroke-width: 1.6; }
   .hdu { fill: #dce6ee; }
   .hdc { fill: #dcebe0; }
+  .nota{ fill: #faf9f7; stroke: #d9d7d2; stroke-width: 1; }
   .ln  { stroke: #8a8880; stroke-width: 1.5; fill: none; }
   .lnd { stroke: #a8a6a0; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
 </style>
@@ -29,152 +31,159 @@
   </marker>
 </defs>
 
-<rect x="0" y="0" width="980" height="740" fill="#ffffff"/>
+<rect x="0" y="0" width="980" height="750" fill="#ffffff"/>
 
 <text x="24" y="30" class="ttl">Modelo de entidades — nutriapp</text>
-<text x="24" y="50" class="sub">Las cantidades siempre en CRUDO. Verde = dato de referencia compartido; azul = datos del usuario.</text>
+<text x="24" y="50" class="sub">Cantidades siempre en CRUDO · verde = catálogo compartido · azul = datos del usuario · ⟨opc⟩ = campo opcional</text>
 
-<!-- ============ FILA 1 ============ -->
-<!-- User -->
-<rect x="24" y="72" width="252" height="150" rx="6" class="bxu"/>
-<rect x="24" y="72" width="252" height="26" rx="6" class="hdu"/>
-<rect x="24" y="90" width="252" height="8" class="hdu" stroke="none"/>
-<text x="36" y="90" class="ent">User</text>
-<text x="36" y="116" class="att"><tspan class="pk">id</tspan></text>
-<text x="36" y="131" class="att">email · password_hash</text>
-<text x="36" y="146" class="att">name</text>
-<text x="36" y="161" class="att">age · height_cm · weight_kg</text>
-<text x="36" y="176" class="att">sexo</text>
-<text x="36" y="191" class="att">nivel_actividad</text>
-<text x="36" y="206" class="att">objetivo  <tspan class="rel">(lista cerrada)</tspan></text>
+<!-- ===== USER ===== -->
+<rect x="24" y="70" width="290" height="252" rx="6" class="bxu"/>
+<rect x="24" y="70" width="290" height="26" rx="6" class="hdu"/>
+<rect x="24" y="88" width="290" height="8" class="hdu" stroke="none"/>
+<text x="36" y="88" class="ent">User</text>
+<text x="36" y="114" class="att"><tspan class="pk">id</tspan></text>
+<text x="36" y="129" class="att">email · password_hash</text>
+<text x="36" y="144" class="att">nombre</text>
+<text x="36" y="159" class="att">sexo · fecha_nacimiento</text>
+<text x="36" y="174" class="att">altura_cm · peso_kg</text>
+<text x="36" y="189" class="att">nivel_actividad</text>
+<text x="36" y="204" class="att">objetivo</text>
+<text x="36" y="219" class="att">comidas_por_dia</text>
+<text x="36" y="234" class="att">preferencia_alimentaria</text>
+<text x="36" y="249" class="att">composicion_corporal</text>
+<text x="36" y="264" class="att">perimetro_cintura_cm  <tspan class="rel">⟨opc⟩</tspan></text>
+<text x="36" y="279" class="att">perimetro_cadera_cm  <tspan class="rel">⟨opc⟩</tspan></text>
+<text x="36" y="294" class="att">perimetro_cuello_cm  <tspan class="rel">⟨opc⟩</tspan></text>
+<text x="36" y="313" class="rel">IMC y edad NO se guardan: se calculan.</text>
 
-<!-- flecha User -> Plan -->
-<path d="M278,140 L336,140" class="ln" marker-end="url(#m)"/>
-<text x="307" y="132" class="car" text-anchor="middle">1:N</text>
+<!-- User -> Plan -->
+<path d="M316,140 L336,140" class="ln" marker-end="url(#m)"/>
+<text x="326" y="132" class="car" text-anchor="middle">1:N</text>
 
-<!-- Plan -->
-<rect x="338" y="72" width="252" height="150" rx="6" class="bxu"/>
-<rect x="338" y="72" width="252" height="26" rx="6" class="hdu"/>
-<rect x="338" y="90" width="252" height="8" class="hdu" stroke="none"/>
-<text x="350" y="90" class="ent">Plan</text>
-<text x="350" y="116" class="att"><tspan class="pk">id</tspan></text>
-<text x="350" y="131" class="att"><tspan class="fk">user_id →</tspan></text>
-<text x="350" y="146" class="att">nombre</text>
-<text x="350" y="161" class="att">fecha_inicio · fecha_fin</text>
-<text x="350" y="176" class="att">origen  <tspan class="rel">(ia | manual)</tspan></text>
-<text x="350" y="191" class="att">creado_en</text>
+<!-- ===== PLAN ===== -->
+<rect x="338" y="70" width="272" height="150" rx="6" class="bxu"/>
+<rect x="338" y="70" width="272" height="26" rx="6" class="hdu"/>
+<rect x="338" y="88" width="272" height="8" class="hdu" stroke="none"/>
+<text x="350" y="88" class="ent">Plan</text>
+<text x="350" y="114" class="att"><tspan class="pk">id</tspan></text>
+<text x="350" y="129" class="att"><tspan class="fk">user_id →</tspan></text>
+<text x="350" y="144" class="att">nombre</text>
+<text x="350" y="159" class="att">activo  <tspan class="rel">(solo uno por usuario)</tspan></text>
+<text x="350" y="174" class="att">origen  <tspan class="rel">(ia | manual)</tspan></text>
+<text x="350" y="189" class="att">creado_en</text>
+<text x="350" y="208" class="rel">Plantilla semanal: se repite hasta cambiarla</text>
 
-<!-- flecha Plan -> Analisis -->
-<path d="M592,140 L650,140" class="lnd" marker-end="url(#md)"/>
-<text x="621" y="132" class="car" text-anchor="middle">1:N</text>
+<!-- Plan -> Analisis -->
+<path d="M612,140 L626,140" class="lnd" marker-end="url(#md)"/>
+<text x="619" y="132" class="car" text-anchor="middle">1:N</text>
 
-<!-- Analisis -->
-<rect x="652" y="72" width="300" height="150" rx="6" class="bxu"/>
-<rect x="652" y="72" width="300" height="26" rx="6" class="hdu"/>
-<rect x="652" y="90" width="300" height="8" class="hdu" stroke="none"/>
-<text x="664" y="90" class="ent">Analisis</text>
-<text x="664" y="116" class="att"><tspan class="pk">id</tspan></text>
-<text x="664" y="131" class="att"><tspan class="fk">user_id →</tspan>  ·  <tspan class="fk">plan_id →</tspan></text>
-<text x="664" y="146" class="att">estado  <tspan class="rel">(pendiente…completado)</tspan></text>
-<text x="664" y="161" class="att">entrada · resultado  <tspan class="rel">(JSON)</tspan></text>
-<text x="664" y="176" class="att">error · intentos</text>
-<text x="664" y="191" class="att">creado_en · actualizado_en</text>
-<text x="664" y="210" class="rel">trabajo asíncrono: lo procesa el worker</text>
+<!-- ===== ANALISIS ===== -->
+<rect x="628" y="70" width="328" height="150" rx="6" class="bxu"/>
+<rect x="628" y="70" width="328" height="26" rx="6" class="hdu"/>
+<rect x="628" y="88" width="328" height="8" class="hdu" stroke="none"/>
+<text x="640" y="88" class="ent">Analisis</text>
+<text x="640" y="114" class="att"><tspan class="pk">id</tspan></text>
+<text x="640" y="129" class="att"><tspan class="fk">user_id →</tspan>  ·  <tspan class="fk">plan_id →</tspan></text>
+<text x="640" y="144" class="att">estado  <tspan class="rel">(pendiente · procesando · completado · fallido)</tspan></text>
+<text x="640" y="159" class="att">entrada · resultado  <tspan class="rel">(JSON)</tspan></text>
+<text x="640" y="174" class="att">error · intentos</text>
+<text x="640" y="189" class="att">creado_en · actualizado_en</text>
+<text x="640" y="208" class="rel">Trabajo asíncrono: lo procesa el worker</text>
 
-<!-- flecha Plan -> ComidaPlanificada (abajo) -->
-<path d="M464,224 L464,266" class="ln" marker-end="url(#m)"/>
-<text x="480" y="250" class="car">1:N</text>
+<!-- Plan -> ComidaPlanificada -->
+<path d="M474,222 L474,242" class="ln" marker-end="url(#m)"/>
+<text x="490" y="238" class="car">1:N</text>
 
-<!-- ============ FILA 2 ============ -->
-<!-- ComidaPlanificada -->
-<rect x="338" y="268" width="252" height="140" rx="6" class="bxu"/>
-<rect x="338" y="268" width="252" height="26" rx="6" class="hdu"/>
-<rect x="338" y="286" width="252" height="8" class="hdu" stroke="none"/>
-<text x="350" y="286" class="ent">ComidaPlanificada</text>
-<text x="350" y="312" class="att"><tspan class="pk">id</tspan></text>
-<text x="350" y="327" class="att"><tspan class="fk">plan_id →</tspan></text>
-<text x="350" y="342" class="att">fecha</text>
-<text x="350" y="357" class="att">momento  <tspan class="rel">(desayuno…cena)</tspan></text>
-<text x="350" y="372" class="att"><tspan class="fk">receta_id →</tspan></text>
-<text x="350" y="387" class="att">raciones</text>
+<!-- ===== COMIDA PLANIFICADA ===== -->
+<rect x="338" y="244" width="272" height="150" rx="6" class="bxu"/>
+<rect x="338" y="244" width="272" height="26" rx="6" class="hdu"/>
+<rect x="338" y="262" width="272" height="8" class="hdu" stroke="none"/>
+<text x="350" y="262" class="ent">ComidaPlanificada</text>
+<text x="350" y="288" class="att"><tspan class="pk">id</tspan></text>
+<text x="350" y="303" class="att"><tspan class="fk">plan_id →</tspan></text>
+<text x="350" y="318" class="att">dia_semana  <tspan class="rel">(lunes … domingo)</tspan></text>
+<text x="350" y="333" class="att">momento  <tspan class="rel">(desayuno … cena)</tspan></text>
+<text x="350" y="348" class="att"><tspan class="fk">receta_id →</tspan></text>
+<text x="350" y="363" class="att">raciones</text>
+<text x="350" y="382" class="rel">Día de la semana, no fecha del calendario</text>
 
-<!-- flecha ComidaPlanificada -> Receta -->
-<path d="M592,336 L650,336" class="ln" marker-end="url(#m)"/>
-<text x="621" y="328" class="car" text-anchor="middle">N:1</text>
+<!-- ComidaPlanificada -> Receta -->
+<path d="M612,310 L626,310" class="ln" marker-end="url(#m)"/>
+<text x="619" y="302" class="car" text-anchor="middle">N:1</text>
 
-<!-- Receta -->
-<rect x="652" y="268" width="300" height="140" rx="6" class="bxu"/>
-<rect x="652" y="268" width="300" height="26" rx="6" class="hdu"/>
-<rect x="652" y="286" width="300" height="8" class="hdu" stroke="none"/>
-<text x="664" y="286" class="ent">Receta</text>
-<text x="664" y="312" class="att"><tspan class="pk">id</tspan></text>
-<text x="664" y="327" class="att"><tspan class="fk">user_id →</tspan>  <tspan class="rel">(nulo = del sistema)</tspan></text>
-<text x="664" y="342" class="att">nombre · pasos</text>
-<text x="664" y="357" class="att">metodo_coccion  <tspan class="rel">(plancha, horno…)</tspan></text>
-<text x="664" y="372" class="att">raciones</text>
-<text x="664" y="387" class="att">origen  <tspan class="rel">(ia | manual)</tspan></text>
+<!-- ===== RECETA ===== -->
+<rect x="628" y="244" width="328" height="150" rx="6" class="bxu"/>
+<rect x="628" y="244" width="328" height="26" rx="6" class="hdu"/>
+<rect x="628" y="262" width="328" height="8" class="hdu" stroke="none"/>
+<text x="640" y="262" class="ent">Receta</text>
+<text x="640" y="288" class="att"><tspan class="pk">id</tspan></text>
+<text x="640" y="303" class="att"><tspan class="fk">user_id →</tspan>  <tspan class="rel">(nulo = receta del sistema)</tspan></text>
+<text x="640" y="318" class="att">nombre · pasos</text>
+<text x="640" y="333" class="att">metodo_coccion  <tspan class="rel">(plancha · horno · hervido …)</tspan></text>
+<text x="640" y="348" class="att">raciones</text>
+<text x="640" y="363" class="att">origen  <tspan class="rel">(ia | manual)</tspan></text>
 
-<!-- flecha Receta -> IngredienteReceta -->
-<path d="M802,410 L802,452" class="ln" marker-end="url(#m)"/>
-<text x="818" y="436" class="car">1:N</text>
+<!-- Receta -> IngredienteReceta -->
+<path d="M790,396 L790,414" class="ln" marker-end="url(#m)"/>
+<text x="806" y="410" class="car">1:N</text>
 
-<!-- ============ FILA 3 ============ -->
-<!-- IngredienteReceta -->
-<rect x="652" y="454" width="300" height="112" rx="6" class="bxu"/>
-<rect x="652" y="454" width="300" height="26" rx="6" class="hdu"/>
-<rect x="652" y="472" width="300" height="8" class="hdu" stroke="none"/>
-<text x="664" y="472" class="ent">IngredienteReceta</text>
-<text x="664" y="498" class="att"><tspan class="pk">id</tspan></text>
-<text x="664" y="513" class="att"><tspan class="fk">receta_id →</tspan>  ·  <tspan class="fk">alimento_id →</tspan></text>
-<text x="664" y="528" class="att">gramos  <tspan class="rel">(en crudo)</tspan></text>
-<text x="664" y="552" class="rel">La cantidad vive aquí, no en el alimento</text>
+<!-- ===== INGREDIENTE RECETA ===== -->
+<rect x="628" y="416" width="328" height="118" rx="6" class="bxu"/>
+<rect x="628" y="416" width="328" height="26" rx="6" class="hdu"/>
+<rect x="628" y="434" width="328" height="8" class="hdu" stroke="none"/>
+<text x="640" y="434" class="ent">IngredienteReceta</text>
+<text x="640" y="460" class="att"><tspan class="pk">id</tspan></text>
+<text x="640" y="475" class="att"><tspan class="fk">receta_id →</tspan>  ·  <tspan class="fk">alimento_id →</tspan></text>
+<text x="640" y="490" class="att">gramos  <tspan class="rel">(en crudo)</tspan></text>
+<text x="640" y="512" class="rel">Resuelve la relación muchos-a-muchos y</text>
+<text x="640" y="525" class="rel">guarda la cantidad, que no pertenece al alimento</text>
 
-<!-- flecha IngredienteReceta -> Alimento -->
-<path d="M650,510 L594,510" class="ln" marker-end="url(#m)"/>
-<text x="622" y="502" class="car" text-anchor="middle">N:1</text>
+<!-- IngredienteReceta -> Alimento -->
+<path d="M626,470 L612,470" class="ln" marker-end="url(#m)"/>
+<text x="619" y="462" class="car" text-anchor="middle">N:1</text>
 
-<!-- Alimento -->
-<rect x="338" y="454" width="252" height="216" rx="6" class="bxc"/>
-<rect x="338" y="454" width="252" height="26" rx="6" class="hdc"/>
-<rect x="338" y="472" width="252" height="8" class="hdc" stroke="none"/>
-<text x="350" y="472" class="ent">Alimento</text>
-<text x="350" y="498" class="att"><tspan class="pk">id</tspan></text>
-<text x="350" y="513" class="att">nombre  <tspan class="rel">(específico)</tspan></text>
-<text x="350" y="528" class="att">categoria  <tspan class="rel">(agrupa y busca)</tspan></text>
-<text x="350" y="543" class="att">estado  <tspan class="rel">(crudo | cocido…)</tspan></text>
-<text x="350" y="558" class="att">kcal_100</text>
-<text x="350" y="573" class="att">proteinas_100</text>
-<text x="350" y="588" class="att">grasas_100</text>
-<text x="350" y="603" class="att">hidratos_100</text>
-<text x="350" y="618" class="att">origen  <tspan class="rel">(seed | api | manual)</tspan></text>
-<text x="350" y="633" class="att">id_externo · nombre_externo</text>
-<text x="350" y="655" class="rel">Catálogo compartido. Macros por 100 g.</text>
+<!-- ===== ALIMENTO ===== -->
+<rect x="338" y="416" width="272" height="240" rx="6" class="bxc"/>
+<rect x="338" y="416" width="272" height="26" rx="6" class="hdc"/>
+<rect x="338" y="434" width="272" height="8" class="hdc" stroke="none"/>
+<text x="350" y="434" class="ent">Alimento</text>
+<text x="350" y="460" class="att"><tspan class="pk">id</tspan></text>
+<text x="350" y="475" class="att">nombre  <tspan class="rel">(específico)</tspan></text>
+<text x="350" y="490" class="att">categoria · estado</text>
+<text x="350" y="505" class="att">energia_kcal</text>
+<text x="350" y="520" class="att">grasas_g · grasas_saturadas_g</text>
+<text x="350" y="535" class="att">hidratos_g · azucares_g</text>
+<text x="350" y="550" class="att">fibra_g · proteinas_g</text>
+<text x="350" y="565" class="att">sal_g</text>
+<text x="350" y="580" class="att">nutrientes_extra  <tspan class="rel">(JSON)</tspan></text>
+<text x="350" y="595" class="att">origen  <tspan class="rel">(seed | api | manual)</tspan></text>
+<text x="350" y="610" class="att">id_externo · nombre_externo</text>
+<text x="350" y="631" class="rel">Todo por 100 g · los 8 campos fijos son</text>
+<text x="350" y="644" class="rel">el etiquetado obligatorio de la UE</text>
 
-<!-- Nota lateral izquierda -->
-<rect x="24" y="454" width="290" height="216" rx="6" fill="#faf9f7" stroke="#d9d7d2" stroke-width="1"/>
-<text x="38" y="478" class="ent">Lo que NO es una tabla</text>
-<text x="38" y="502" class="att">Lista de la compra</text>
-<text x="38" y="520" class="rel">Se calcula al vuelo recorriendo las comidas</text>
-<text x="38" y="535" class="rel">del plan y sumando ingredientes por alimento.</text>
-<text x="38" y="550" class="rel">No se guarda: así nunca queda desfasada</text>
-<text x="38" y="565" class="rel">respecto al plan.</text>
-<text x="38" y="592" class="ent">Por qué la cantidad va aparte</text>
-<text x="38" y="614" class="rel">Alimento guarda los macros por 100 g, que son</text>
-<text x="38" y="629" class="rel">fijos. Los 200 g de pollo pertenecen a UNA</text>
-<text x="38" y="644" class="rel">receta concreta, no al pollo. Corriges el pollo</text>
-<text x="38" y="659" class="rel">una vez y se arreglan todas las recetas.</text>
+<!-- ===== NOTA: listas cerradas ===== -->
+<rect x="24" y="336" width="290" height="150" rx="6" class="nota"/>
+<text x="38" y="358" class="ent">Listas cerradas</text>
+<text x="38" y="379" class="att">objetivo</text>
+<text x="38" y="392" class="rel">perder_grasa · mantener · ganar_musculo</text>
+<text x="38" y="410" class="att">nivel_actividad</text>
+<text x="38" y="423" class="rel">sedentario · ligero · moderado · alto</text>
+<text x="38" y="441" class="att">composicion_corporal</text>
+<text x="38" y="454" class="rel">percepción del propio usuario, complementa</text>
+<text x="38" y="467" class="rel">al IMC, que no distingue músculo de grasa</text>
 
-<!-- Nota User -->
-<rect x="24" y="244" width="290" height="164" rx="6" fill="#faf9f7" stroke="#d9d7d2" stroke-width="1"/>
-<text x="38" y="268" class="ent">Listas cerradas (no texto libre)</text>
-<text x="38" y="292" class="att">objetivo</text>
-<text x="38" y="307" class="rel">perder_grasa · mantener · ganar_musculo</text>
-<text x="38" y="329" class="att">momento</text>
-<text x="38" y="344" class="rel">desayuno · almuerzo · comida · merienda · cena</text>
-<text x="38" y="366" class="att">estado (alimento)</text>
-<text x="38" y="381" class="rel">crudo · cocido · asado · frito</text>
-<text x="38" y="399" class="rel">Valores predecibles para la interfaz y para la IA.</text>
+<!-- ===== NOTA: lista de la compra ===== -->
+<rect x="24" y="500" width="290" height="156" rx="6" class="nota"/>
+<text x="38" y="522" class="ent">La lista de la compra no es una tabla</text>
+<text x="38" y="543" class="rel">Se calcula al vuelo: recorre las comidas del plan</text>
+<text x="38" y="556" class="rel">y suma los gramos por alimento.</text>
+<text x="38" y="576" class="att">?semanas=1..4</text>
+<text x="38" y="589" class="rel">Como el plan es una plantilla semanal, pedir</text>
+<text x="38" y="602" class="rel">varias semanas es multiplicar el resultado.</text>
+<text x="38" y="622" class="rel">Al no guardarse, nunca queda desfasada</text>
+<text x="38" y="635" class="rel">respecto al plan.</text>
 
-<text x="24" y="700" class="rel">→ = clave foránea    ·    1:N = uno a muchos    ·    N:1 = muchos a uno    ·    línea discontinua = relación opcional</text>
-<text x="24" y="720" class="rel">Receta y Alimento forman una relación muchos-a-muchos resuelta con IngredienteReceta, que además guarda la cantidad.</text>
+<text x="24" y="690" class="relb">→ = clave foránea    ·    1:N = uno a muchos    ·    N:1 = muchos a uno    ·    discontinua = opcional</text>
+<text x="24" y="710" class="rel">Un plan pertenece a UN usuario: lleva sus calorías y su objetivo. Si dos personas siguieran "el mismo" plan, cada una tendría su copia.</text>
+<text x="24" y="728" class="rel">Se guarda el dato estable (fecha de nacimiento, peso, altura) y se deriva el volátil (edad, IMC). Nunca al revés.</text>
 </svg>
