@@ -1,0 +1,651 @@
+<!doctype html>
+<!--
+  Interfaz mínima de nutriapp.
+
+  Es una HERRAMIENTA DE TRABAJO, no el frontend del producto: sirve para dejar de
+  comprobar las cosas con curl. Fea está bien; completa, no.
+
+  Tres decisiones que conviene no perder de vista:
+
+  1. La sirve la propia API, en el MISMO ORIGEN que los endpoints. La sesión va en
+     una cookie HttpOnly firmada: desde otro puerto seguiría siendo el mismo sitio
+     (el puerto no cuenta para SameSite) pero sería otro ORIGEN, y entonces cada
+     llamada necesitaría CORS con Access-Control-Allow-Credentials, un origen
+     explícito en vez de *, y credentials:'include' en cada fetch. Para una
+     herramienta interna eso no se paga.
+  2. Un solo fichero, sin framework, sin npm y sin nada traído de un CDN. Cuando
+     exista el frontend de verdad, esto sale de aquí y se pone detrás de NGINX:
+     que sea un fichero suelto hace que mudarlo sea copiarlo y nada más.
+  3. Aquí NO hay lógica de negocio. La página solo llama a endpoints que ya
+     existen y enseña lo que devuelven. Ni un cálculo nutricional: esos números
+     salen del catálogo a través de la API.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nutriapp — panel</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --line: #2c313b;
+    --fg: #e6e8ec; --dim: #9aa2b1; --accent: #6ea8fe;
+    --ok: #57c98a; --warn: #e0b34a; --bad: #e2685f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 1rem; margin: 0; letter-spacing: .04em; }
+  header .who { color: var(--dim); margin-left: auto; }
+  nav { display: flex; gap: .3rem; padding: .6rem 1.2rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  nav button.tab {
+    background: none; border: 1px solid transparent; color: var(--dim);
+    padding: .35rem .8rem; border-radius: 6px; cursor: pointer; font: inherit;
+  }
+  nav button.tab.on { color: var(--fg); border-color: var(--line); background: var(--panel); }
+  main { padding: 1.2rem; max-width: 1100px; }
+  section.view { display: none; }
+  section.view.on { display: block; }
+  h2 { font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 .8rem; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  button {
+    background: var(--accent); border: 0; color: #10131a; font: inherit; font-weight: 600;
+    padding: .45rem .9rem; border-radius: 6px; cursor: pointer;
+  }
+  button.ghost { background: none; border: 1px solid var(--line); color: var(--fg); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select {
+    background: #12141a; border: 1px solid var(--line); color: var(--fg);
+    padding: .4rem .5rem; border-radius: 5px; font: inherit; width: 100%;
+  }
+  label { display: block; color: var(--dim); font-size: .8rem; margin-bottom: .2rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .7rem; }
+  .row { display: flex; gap: .7rem; align-items: flex-end; flex-wrap: wrap; }
+  table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+  th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+  .scroll { overflow-x: auto; }
+  .plan-grid td.meal { cursor: pointer; }
+  .plan-grid td.meal:hover { background: #232833; }
+  .plan-grid td.empty { color: #4a515e; }
+  .pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; border: 1px solid var(--line); }
+  .pill.completed { color: var(--ok); border-color: var(--ok); }
+  .pill.failed { color: var(--bad); border-color: var(--bad); }
+  .pill.processing, .pill.pending { color: var(--warn); border-color: var(--warn); }
+  .msg { padding: .6rem .8rem; border-radius: 6px; margin-bottom: .8rem; border: 1px solid var(--line); }
+  .msg.err { color: var(--bad); border-color: var(--bad); }
+  .msg.ok { color: var(--ok); border-color: var(--ok); }
+  .msg.info { color: var(--dim); }
+  .muted { color: var(--dim); }
+  .warn-box { border: 1px solid var(--warn); color: var(--warn); padding: .5rem .7rem; border-radius: 6px; margin: .6rem 0; font-size: .85rem; }
+  .spinner { display: inline-block; width: .8em; height: .8em; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; max-width: 640px; width: 92%; padding: 1.2rem; }
+  dialog::backdrop { background: #0009; }
+  pre { white-space: pre-wrap; font: inherit; color: var(--dim); margin: .4rem 0 0; }
+  code { color: var(--dim); font-size: .82rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>nutriapp · panel</h1>
+  <span class="who" id="who">sin sesión</span>
+  <button class="ghost" id="logout" hidden>salir</button>
+</header>
+
+<nav id="nav" hidden>
+  <button class="tab on" data-view="plan">Plan</button>
+  <button class="tab" data-view="perfil">Perfil</button>
+  <button class="tab" data-view="compra">Compra</button>
+  <button class="tab" data-view="trabajos">Trabajos</button>
+</nav>
+
+<main>
+  <div id="flash"></div>
+
+  <!-- ---------------------------------------------------------- login -->
+  <section class="view on" id="view-login">
+    <div class="card" style="max-width: 360px">
+      <h2>Entrar</h2>
+      <div style="margin-bottom:.7rem">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username">
+      </div>
+      <div style="margin-bottom:.9rem">
+        <label for="password">Contraseña</label>
+        <input id="password" type="password" autocomplete="current-password">
+      </div>
+      <button id="login">Entrar</button>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- plan -->
+  <section class="view" id="view-plan">
+    <div class="card">
+      <h2>Generar un plan</h2>
+      <div class="row">
+        <button id="generate">Generar plan con IA</button>
+        <span id="gen-status" class="muted"></span>
+      </div>
+      <p class="muted" style="margin:.7rem 0 0">
+        La llamada al modelo puede tardar varios minutos. La página va preguntando
+        por el trabajo hasta que termina.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Plan activo</h2>
+      <div id="plan-head" class="muted">cargando…</div>
+      <div class="scroll"><table class="plan-grid" id="plan-grid"></table></div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- perfil -->
+  <section class="view" id="view-perfil">
+    <div class="card">
+      <h2>Mi perfil</h2>
+      <div class="grid" id="profile-fields"></div>
+      <div class="row" style="margin-top:1rem">
+        <button id="save-profile">Guardar</button>
+        <span id="profile-derived" class="muted"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- compra -->
+  <section class="view" id="view-compra">
+    <div class="card">
+      <h2>Lista de la compra</h2>
+      <div class="row">
+        <div style="width:120px">
+          <label for="weeks">Semanas</label>
+          <select id="weeks">
+            <option>1</option><option>2</option><option>3</option><option>4</option>
+          </select>
+        </div>
+        <button id="load-shopping">Calcular</button>
+      </div>
+      <div id="shopping"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- trabajos -->
+  <section class="view" id="view-trabajos">
+    <div class="card">
+      <h2>Trabajos</h2>
+      <div class="row" style="margin-bottom:.8rem">
+        <button class="ghost" id="reload-jobs">Recargar</button>
+        <span class="muted" id="jobs-count"></span>
+      </div>
+      <div class="scroll"><table id="jobs-table"></table></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="recipe-dialog">
+  <div id="recipe-body"></div>
+  <div style="margin-top:1rem"><button class="ghost" id="close-recipe">Cerrar</button></div>
+</dialog>
+
+<script>
+"use strict";
+
+// Las listas cerradas están copiadas de app/users/models.py y app/plans/models.py.
+// Es duplicación consciente: hoy ningún endpoint las publica, y el encargo dice
+// que no invente uno. Queda anotado en el informe.
+const SEXES = { male: "hombre", female: "mujer", other: "otro" };
+const ACTIVITY_LEVELS = { sedentary: "sedentario", light: "ligero", moderate: "moderado", high: "alto" };
+const GOALS = { lose_fat: "perder grasa", maintain: "mantener", gain_muscle: "ganar músculo" };
+const FOOD_PREFERENCES = { omnivore: "omnívoro", vegetarian: "vegetariano", vegan: "vegano" };
+const BODY_COMPOSITIONS = { lean: "delgado", average: "normal", athletic: "atlético", overweight: "sobrepeso" };
+
+const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+const DAY_LABEL = { monday:"lunes", tuesday:"martes", wednesday:"miércoles",
+                    thursday:"jueves", friday:"viernes", saturday:"sábado", sunday:"domingo" };
+const SLOTS = ["breakfast","mid_morning","lunch","afternoon_snack","dinner"];
+const SLOT_LABEL = { breakfast:"desayuno", mid_morning:"media mañana", lunch:"comida",
+                     afternoon_snack:"merienda", dinner:"cena" };
+
+const NUTRIENTS = [
+  ["energy_kcal","kcal"], ["protein_g","proteínas (g)"], ["carbs_g","hidratos (g)"],
+  ["sugars_g","azúcares (g)"], ["fat_g","grasas (g)"], ["saturated_fat_g","saturadas (g)"],
+  ["fiber_g","fibra (g)"], ["salt_g","sal (g)"],
+];
+
+const PROFILE_FIELDS = [
+  { name: "name", label: "Nombre", type: "text" },
+  { name: "sex", label: "Sexo", options: SEXES },
+  { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
+  { name: "height_cm", label: "Altura (cm)", type: "number" },
+  { name: "weight_kg", label: "Peso (kg)", type: "number", step: "0.1" },
+  { name: "activity_level", label: "Nivel de actividad", options: ACTIVITY_LEVELS },
+  { name: "goal", label: "Objetivo", options: GOALS },
+  { name: "meals_per_day", label: "Comidas al día", type: "number" },
+  { name: "food_preference", label: "Preferencia alimentaria", options: FOOD_PREFERENCES },
+  { name: "body_composition", label: "Composición corporal", options: BODY_COMPOSITIONS },
+  { name: "waist_cm", label: "Cintura (cm)", type: "number", step: "0.1" },
+  { name: "hip_cm", label: "Cadera (cm)", type: "number", step: "0.1" },
+  { name: "neck_cm", label: "Cuello (cm)", type: "number", step: "0.1" },
+];
+
+let me = null;
+let activePlan = null;
+let pollTimer = null;
+
+// ------------------------------------------------------------------ utilidades
+
+const $ = (id) => document.getElementById(id);
+
+function flash(text, kind = "info") {
+  $("flash").innerHTML = "";
+  if (!text) return;
+  const div = document.createElement("div");
+  div.className = "msg " + kind;
+  div.textContent = text;
+  $("flash").appendChild(div);
+}
+
+/**
+ * Envoltorio de fetch. Al ser mismo origen, la cookie de sesión viaja sola:
+ * no hace falta credentials:'include' ni ninguna cabecera de CORS.
+ *
+ * Devuelve {status, data}. Nunca lanza por un código HTTP: quien llama decide
+ * qué hacer con un 409, que aquí es una respuesta legítima y no un fallo.
+ */
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: options.body ? { "Content-Type": "application/json" } : {},
+    ...options,
+  });
+  let data = null;
+  try { data = await response.json(); } catch (e) { data = null; }
+
+  if (response.status === 401 && path !== "/me" && path !== "/login") {
+    showLogin();
+    flash("la sesión ha caducado", "err");
+  }
+  return { status: response.status, data };
+}
+
+/** El mensaje que manda la API, no uno inventado aquí. */
+const apiError = (data, fallback) => (data && data.error) || fallback;
+
+function text(el, value) { el.textContent = value; }
+
+function fmt(value, digits = 1) {
+  if (value === null || value === undefined) return "—";
+  return typeof value === "number" ? value.toFixed(digits) : String(value);
+}
+
+// ------------------------------------------------------------------ navegación
+
+function show(view) {
+  document.querySelectorAll("section.view").forEach((s) => s.classList.remove("on"));
+  $("view-" + view).classList.add("on");
+  document.querySelectorAll("nav .tab").forEach((b) =>
+    b.classList.toggle("on", b.dataset.view === view));
+}
+
+document.querySelectorAll("nav .tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    const view = button.dataset.view;
+    show(view);
+    if (view === "trabajos") loadJobs();
+    if (view === "plan") loadActivePlan();
+  });
+});
+
+function showLogin() {
+  me = null;
+  $("nav").hidden = true;
+  $("logout").hidden = true;
+  text($("who"), "sin sesión");
+  document.querySelectorAll("section.view").forEach((s) => s.classList.remove("on"));
+  $("view-login").classList.add("on");
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function showApp(user) {
+  me = user;
+  $("nav").hidden = false;
+  $("logout").hidden = false;
+  text($("who"), user.email);
+  renderProfile();
+  show("plan");
+  loadActivePlan();
+}
+
+// --------------------------------------------------------------------- sesión
+
+$("login").addEventListener("click", async () => {
+  const { status, data } = await api("/login", {
+    method: "POST",
+    body: JSON.stringify({ email: $("email").value, password: $("password").value }),
+  });
+  if (status !== 200) return flash(apiError(data, "no se ha podido entrar"), "err");
+  flash("");
+  $("password").value = "";
+  showApp(data);
+});
+
+$("password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("login").click(); });
+
+$("logout").addEventListener("click", async () => {
+  await api("/logout", { method: "POST" });
+  showLogin();
+  flash("sesión cerrada");
+});
+
+// --------------------------------------------------------------------- perfil
+
+function renderProfile() {
+  const container = $("profile-fields");
+  container.innerHTML = "";
+
+  for (const field of PROFILE_FIELDS) {
+    const wrapper = document.createElement("div");
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    label.htmlFor = "f-" + field.name;
+    wrapper.appendChild(label);
+
+    let input;
+    if (field.options) {
+      // Lista cerrada: desplegable, no texto libre. La API rechaza cualquier
+      // otro valor con un 400, así que un input de texto solo daría errores.
+      input = document.createElement("select");
+      input.appendChild(new Option("— sin indicar —", ""));
+      for (const [value, labelText] of Object.entries(field.options)) {
+        input.appendChild(new Option(labelText, value));
+      }
+    } else {
+      input = document.createElement("input");
+      input.type = field.type;
+      if (field.step) input.step = field.step;
+    }
+    input.id = "f-" + field.name;
+    input.value = me[field.name] === null || me[field.name] === undefined ? "" : me[field.name];
+    wrapper.appendChild(input);
+    container.appendChild(wrapper);
+  }
+
+  // Edad e IMC son derivados: se enseñan, no se editan (3.5).
+  text($("profile-derived"),
+    `edad: ${me.age ?? "—"} · IMC: ${me.bmi ?? "—"} (calculados, no se guardan)`);
+}
+
+$("save-profile").addEventListener("click", async () => {
+  const body = {};
+  for (const field of PROFILE_FIELDS) {
+    const raw = $("f-" + field.name).value;
+    if (raw === "") { body[field.name] = null; continue; }
+    body[field.name] = field.type === "number" ? Number(raw) : raw;
+  }
+
+  const { status, data } = await api(`/users/${me.id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  if (status !== 200) return flash(apiError(data, "no se ha podido guardar"), "err");
+
+  me = data;
+  renderProfile();
+  flash("perfil guardado", "ok");
+});
+
+// ----------------------------------------------------------- generar un plan
+
+$("generate").addEventListener("click", async () => {
+  const { status, data } = await api("/plans/generate", { method: "POST" });
+
+  if (status === 409) {
+    // El mensaje lo manda la API (perfil incompleto, generación ya en marcha,
+    // catálogo vacío). Inventarse uno aquí escondería el motivo real.
+    return flash(apiError(data, "conflicto"), "err");
+  }
+  if (status !== 202) return flash(apiError(data, "no se ha podido encolar"), "err");
+
+  flash("");
+  pollJob(data.id);
+});
+
+/**
+ * Pregunta por el trabajo cada pocos segundos hasta que termina.
+ *
+ * El contador de segundos no es adorno: la llamada al modelo puede pasar de tres
+ * minutos, y un botón que no da señales durante ese rato parece roto.
+ */
+function pollJob(jobId) {
+  if (pollTimer) clearInterval(pollTimer);
+
+  const started = Date.now();
+  const button = $("generate");
+  button.disabled = true;
+
+  const tick = async () => {
+    const seconds = Math.round((Date.now() - started) / 1000);
+    const { status, data } = await api(`/jobs/${jobId}`);
+
+    if (status !== 200) {
+      clearInterval(pollTimer); pollTimer = null; button.disabled = false;
+      $("gen-status").innerHTML = "";
+      return flash(apiError(data, "no se ha podido consultar el trabajo"), "err");
+    }
+
+    $("gen-status").innerHTML =
+      `<span class="spinner"></span> trabajo ${data.id}: ` +
+      `<span class="pill ${data.state}">${data.state}</span> · ${seconds} s` +
+      (data.attempts > 1 ? ` · intento ${data.attempts}` : "");
+
+    if (data.state === "completed" || data.state === "failed") {
+      clearInterval(pollTimer); pollTimer = null; button.disabled = false;
+      $("gen-status").innerHTML =
+        `trabajo ${data.id}: <span class="pill ${data.state}">${data.state}</span> · ${seconds} s`;
+
+      if (data.state === "completed") {
+        flash(`plan generado en ${seconds} s`, "ok");
+        loadActivePlan();
+      } else {
+        flash("el trabajo ha fallado: " + (data.error || "sin detalle"), "err");
+      }
+    }
+  };
+
+  tick();
+  pollTimer = setInterval(tick, 3000);
+}
+
+// ------------------------------------------------------------- plan y parrilla
+
+async function loadActivePlan() {
+  const { status, data } = await api("/plans");
+  if (status !== 200) return;
+
+  const active = (data || []).find((p) => p.active);
+  if (!active) {
+    activePlan = null;
+    text($("plan-head"), "no hay ningún plan activo todavía");
+    $("plan-grid").innerHTML = "";
+    return;
+  }
+
+  const full = await api(`/plans/${active.id}`);
+  if (full.status !== 200) return;
+  activePlan = full.data;
+
+  $("plan-head").innerHTML =
+    `<strong>${escapeHtml(activePlan.name)}</strong> · origen: ${activePlan.source} · ` +
+    `${activePlan.meals.length} comidas · creado el ` +
+    new Date(activePlan.created_at).toLocaleString("es-ES");
+
+  renderPlanGrid(activePlan);
+}
+
+function renderPlanGrid(plan) {
+  // Solo los momentos del día que el plan usa de verdad: enseñar cinco columnas
+  // cuando el usuario hace tres comidas llena la parrilla de huecos.
+  const usedSlots = SLOTS.filter((slot) => plan.meals.some((m) => m.meal_slot === slot));
+  const byCell = {};
+  for (const meal of plan.meals) byCell[meal.day_of_week + "|" + meal.meal_slot] = meal;
+
+  let html = "<thead><tr><th></th>";
+  for (const slot of usedSlots) html += `<th>${SLOT_LABEL[slot]}</th>`;
+  html += "</tr></thead><tbody>";
+
+  for (const day of DAYS) {
+    html += `<tr><th>${DAY_LABEL[day]}</th>`;
+    for (const slot of usedSlots) {
+      const meal = byCell[day + "|" + slot];
+      html += meal
+        ? `<td class="meal" data-recipe="${meal.recipe_id}">${escapeHtml(meal.recipe)}` +
+          (meal.servings !== 1 ? `<br><span class="muted">×${meal.servings} raciones</span>` : "") +
+          "</td>"
+        : '<td class="empty">—</td>';
+    }
+    html += "</tr>";
+  }
+  html += "</tbody>";
+
+  $("plan-grid").innerHTML = html;
+  $("plan-grid").querySelectorAll("td.meal").forEach((cell) =>
+    cell.addEventListener("click", () => openRecipe(cell.dataset.recipe)));
+}
+
+// ---------------------------------------------------------------- ficha receta
+
+async function openRecipe(recipeId) {
+  const { status, data } = await api(`/recipes/${recipeId}`);
+  if (status !== 200) return flash(apiError(data, "no se ha podido cargar la receta"), "err");
+
+  const nutrition = data.nutrition || {};
+  const incomplete = nutrition.incomplete_nutrients || [];
+
+  let html = `<h2 style="color:var(--fg);font-size:1.05rem;text-transform:none;letter-spacing:0">${escapeHtml(data.name)}</h2>`;
+  html += `<p class="muted">${data.servings} ración(es) · cocción: ${escapeHtml(data.cooking_method || "—")} · origen: ${escapeHtml(data.source)}</p>`;
+
+  html += "<h3 style=\"font-size:.85rem;color:var(--dim)\">Ingredientes (cantidades EN CRUDO)</h3><table><tbody>";
+  for (const ingredient of data.ingredients) {
+    html += `<tr><td>${escapeHtml(ingredient.food)}</td><td class="muted">${escapeHtml(ingredient.category || "")}</td>` +
+            `<td style="text-align:right">${ingredient.grams} g</td></tr>`;
+  }
+  html += "</tbody></table>";
+
+  if (incomplete.length) {
+    // Un total que parece completo sin serlo es peor que un aviso: un nulo del
+    // catálogo significa "no lo sabemos", no cero.
+    const names = incomplete.map((f) => (NUTRIENTS.find((n) => n[0] === f) || [f, f])[1]);
+    html += `<div class="warn-box">Faltan datos en el catálogo para: <strong>${names.join(", ")}</strong>.
+             Esos totales están incompletos: hay ingredientes sin ese valor, y no se
+             han contado como cero.</div>`;
+  }
+
+  html += "<h3 style=\"font-size:.85rem;color:var(--dim)\">Resumen nutricional</h3>";
+  html += "<table><thead><tr><th></th><th style=\"text-align:right\">total</th><th style=\"text-align:right\">por ración</th></tr></thead><tbody>";
+  for (const [field, label] of NUTRIENTS) {
+    const incompleteMark = incomplete.includes(field) ? ' <span class="muted">(incompleto)</span>' : "";
+    html += `<tr><td>${label}${incompleteMark}</td>` +
+            `<td style="text-align:right">${fmt(nutrition.totals?.[field])}</td>` +
+            `<td style="text-align:right">${fmt(nutrition.per_serving?.[field])}</td></tr>`;
+  }
+  html += "</tbody></table>";
+
+  if (data.steps) {
+    html += "<h3 style=\"font-size:.85rem;color:var(--dim)\">Elaboración</h3><pre>" +
+            escapeHtml(data.steps) + "</pre>";
+  }
+
+  $("recipe-body").innerHTML = html;
+  $("recipe-dialog").showModal();
+}
+
+$("close-recipe").addEventListener("click", () => $("recipe-dialog").close());
+
+// -------------------------------------------------------- lista de la compra
+
+$("load-shopping").addEventListener("click", async () => {
+  if (!activePlan) {
+    await loadActivePlan();
+    if (!activePlan) return flash("no hay plan activo del que hacer la lista", "err");
+  }
+
+  const weeks = $("weeks").value;
+  const { status, data } = await api(`/plans/${activePlan.id}/shopping-list?weeks=${weeks}`);
+  if (status !== 200) return flash(apiError(data, "no se ha podido calcular"), "err");
+
+  let html = `<p class="muted" style="margin-top:1rem">${escapeHtml(data.plan)} · ${data.weeks} semana(s) · ` +
+             `${data.total_foods} alimentos · <strong>${data.note}</strong></p>`;
+  for (const group of data.categories) {
+    html += `<h3 style="font-size:.85rem;color:var(--dim);margin:1rem 0 .3rem">${escapeHtml(group.category)}</h3><table><tbody>`;
+    for (const food of group.foods) {
+      html += `<tr><td>${escapeHtml(food.name)}</td><td style="text-align:right">${food.grams} g</td></tr>`;
+    }
+    html += "</tbody></table>";
+  }
+  $("shopping").innerHTML = html;
+});
+
+// -------------------------------------------------------------------- trabajos
+
+$("reload-jobs").addEventListener("click", loadJobs);
+
+async function loadJobs() {
+  const { status, data } = await api("/jobs");
+  if (status !== 200) return;
+
+  text($("jobs-count"), `${data.length} trabajo(s)`);
+
+  let html = "<thead><tr><th>id</th><th>tipo</th><th>estado</th><th>intentos</th>" +
+             "<th>modelo</th><th>duración</th><th>tokens</th><th>coste</th><th>error</th></tr></thead><tbody>";
+
+  for (const job of data) {
+    // El consumo lo deja el worker dentro de `result`; un trabajo fallido no
+    // llegó a tenerlo, así que estas celdas salen vacías y eso ya informa.
+    const result = job.result || {};
+    const duration = result.llm_duration_ms
+      ? (result.llm_duration_ms / 1000).toFixed(1) + " s" : "—";
+    const tokens = result.llm_total_tokens
+      ? `${result.llm_prompt_tokens}/${result.llm_completion_tokens}` : "—";
+
+    html += `<tr>
+      <td>${job.id}</td>
+      <td>${job.type}</td>
+      <td><span class="pill ${job.state}">${job.state}</span></td>
+      <td>${job.attempts}</td>
+      <td><code>${escapeHtml(result.llm_model || "—")}</code></td>
+      <td>${duration}</td>
+      <td>${tokens}</td>
+      <td>${result.llm_cost !== undefined ? result.llm_cost : "—"}</td>
+      <td class="muted" style="max-width:340px">${job.error ? escapeHtml(job.error) : ""}</td>
+    </tr>`;
+  }
+  html += "</tbody>";
+  $("jobs-table").innerHTML = html;
+}
+
+/**
+ * Todo lo que viene de la API se escapa antes de meterlo en el HTML.
+ *
+ * No es paranoia de manual: los nombres de las recetas y los pasos los ESCRIBE UN
+ * MODELO DE LENGUAJE a partir de un prompt, así que son texto no confiable por
+ * definición. Aquí se construye HTML con plantillas, y sin escapar bastaría con
+ * que el modelo colara una etiqueta para inyectar script en el panel.
+ */
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ---------------------------------------------------------------------- inicio
+
+(async () => {
+  const { status, data } = await api("/me");
+  if (status === 200) showApp(data); else showLogin();
+})();
+</script>
+</body>
+</html>

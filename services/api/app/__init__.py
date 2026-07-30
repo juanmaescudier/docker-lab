@@ -51,6 +51,20 @@ def create_app():
     def health():
         return jsonify(status="ok"), 200
 
+    # ---------- Panel de trabajo ----------
+    # La página la sirve la propia API, en el MISMO ORIGEN que los endpoints.
+    # La sesión va en una cookie HttpOnly firmada: desde otro puerto seguiría
+    # siendo el mismo sitio (el puerto no cuenta para SameSite) pero sería otro
+    # origen, y entonces cada llamada necesitaría cabeceras CORS con
+    # `Access-Control-Allow-Credentials` y un origen explícito en vez de `*`.
+    # Para una herramienta interna de depuración eso no se paga.
+    #
+    # Es temporal a propósito: cuando exista el frontend de verdad, este fichero
+    # sale de aquí y se pone detrás de NGINX, que ya está en el ROADMAP.
+    @app.get("/")
+    def panel():
+        return app.send_static_file("index.html")
+
     # ---------- Blueprints (un módulo por dominio) ----------
     from .users.routes import users_bp
     from .users.auth import auth_bp
