@@ -93,6 +93,29 @@ class User(db.Model):
         height_m = self.height_cm / 100
         return round(self.weight_kg / (height_m ** 2), 1)
 
+    def ai_profile(self):
+        """El perfil tal y como viaja en el `input` de un trabajo del modelo.
+
+        Solo lo que el modelo necesita para planificar (3.9): ni el email ni el
+        identificador, que no aportan nada a la decisión y son dato personal que
+        no tiene por qué salir hacia un servicio de terceros.
+
+        Va la **edad**, no la fecha de nacimiento: es lo que se usa para estimar
+        necesidades, y es un dato menos identificativo.
+        """
+        return {
+            "sex": self.sex,
+            "age": self.age,
+            "height_cm": self.height_cm,
+            "weight_kg": self.weight_kg,
+            "bmi": self.bmi,
+            "activity_level": self.activity_level,
+            "goal": self.goal,
+            "meals_per_day": self.meals_per_day,
+            "food_preference": self.food_preference,
+            "body_composition": self.body_composition,
+        }
+
     def to_dict(self):
         """Diccionario para el JSON. OJO: nunca incluimos el password_hash."""
         return {

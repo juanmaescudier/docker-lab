@@ -8,9 +8,18 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy import or_
 
 from ..extensions import db
+from ..jobs.models import (
+    PENDING,
+    PROCESSING,
+    TYPE_PLAN_GENERATION,
+    TYPE_PLAN_REVIEW,
+    Job,
+)
+from ..queue import enqueue
 from ..recipes.models import Recipe
 from ..session import current_user_id, login_required
-from . import shopping_list
+from ..users.models import User
+from . import ai, shopping_list
 from .models import (
     DAYS_OF_WEEK,
     MEAL_SLOTS,
@@ -20,6 +29,12 @@ from .models import (
 )
 
 plans_bp = Blueprint("plans", __name__, url_prefix="/plans")
+
+# Sin estos campos el modelo no puede estimar necesidades calóricas (3.9): le
+# faltaría lo básico y devolvería un plan inventado con cara de plausible.
+REQUIRED_PROFILE_FIELDS = (
+    "sex", "birth_date", "height_cm", "weight_kg", "activity_level", "goal",
+)
 
 
 def _my_plan(plan_id):
@@ -123,6 +138,26 @@ def _replace_meals(plan, normalized):
         plan.meals.append(PlannedMeal(**item))
 
 
+def _pending_job(user_id, job_type):
+    """El trabajo de ese tipo que ya está en marcha, si lo hay."""
+    return Job.query.filter(
+        Job.user_id == user_id,
+        Job.type == job_type,
+        Job.state.in_((PENDING, PROCESSING)),
+    ).first()
+
+
+def _accepted(job):
+    """Respuesta común de los endpoints que encolan: 202 y dónde consultarlo.
+
+    202 y no 201: no se ha creado el plan todavía, se ha **aceptado el encargo**
+    de crearlo. El cliente pregunta después por `Location`.
+    """
+    response = jsonify(job.to_dict(include_input=False))
+    response.headers["Location"] = f"/jobs/{job.id}"
+    return response, 202
+
+
 @plans_bp.get("")
 @login_required
 def list_plans():
@@ -179,6 +214,105 @@ def create_plan():
     response = jsonify(plan.to_dict())
     response.headers["Location"] = f"/plans/{plan.id}"
     return response, 201
+
+
+@plans_bp.post("/generate")
+@login_required
+def generate_plan():
+    """Encola la generación de un plan por IA y devuelve 202 con el `job_id`.
+
+    Aquí no se llama al modelo: hacerlo dentro de la petición bloquearía un
+    worker de gunicorn decenas de segundos y con cuatro peticiones a la vez la
+    API dejaría de responder a todo el mundo (ADR-0008).
+
+    La API deja el `input` preparado —perfil y catálogo— para que el worker no
+    tenga que conocer el esquema.
+    """
+    user_id = current_user_id()
+    user = db.session.get(User, user_id)
+
+    missing = [f for f in REQUIRED_PROFILE_FIELDS if getattr(user, f) is None]
+    if missing:
+        # 409 y no 400: la petición está perfecta, lo que choca es el estado del
+        # perfil. El cliente no lo arregla cambiando el cuerpo, sino su usuario.
+        return jsonify(error=(
+            "completa tu perfil antes de generar un plan; faltan: "
+            + ", ".join(missing)
+        )), 409
+
+    in_flight = _pending_job(user_id, TYPE_PLAN_GENERATION)
+    if in_flight is not None:
+        # Sin esto, pulsar dos veces generaría dos planes y el segundo
+        # desactivaría al primero: dinero gastado en un plan que nadie ve.
+        return jsonify(
+            error="ya tienes una generación en marcha",
+            job_id=in_flight.id,
+        ), 409
+
+    job_input = ai.build_generation_input(user)
+    if not job_input["foods"]:
+        return jsonify(error="el catálogo está vacío: no hay con qué componer"), 409
+
+    job = Job(
+        user_id=user_id,
+        type=TYPE_PLAN_GENERATION,
+        state=PENDING,
+        input=job_input,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    # El commit va antes de encolar: si no, el worker podría coger el mensaje y
+    # buscar una fila que todavía no existe.
+    enqueue(TYPE_PLAN_GENERATION, job.id)
+
+    return _accepted(job)
+
+
+@plans_bp.post("/<int:plan_id>/review")
+@login_required
+def review_plan(plan_id):
+    """Encola la revisión de un plan por IA y devuelve 202 con el `job_id`.
+
+    Es lo que antes era `POST /analysis`. Vive en el dominio de planes porque lo
+    que se pide es «revísame **este plan**»; el trabajo resultante se consulta,
+    como todos, en `/jobs/<id>`.
+
+    Solo para planes creados a mano (3.9): pedirle a la IA que revise un plan que
+    ha generado ella misma sería preguntarle si hizo bien su trabajo —por
+    construcción diría que sí— y no aportaría nada.
+    """
+    plan = _my_plan(plan_id)
+    if plan is None:
+        return jsonify(error="plan no encontrado"), 404
+
+    if plan.source != SOURCE_MANUAL:
+        return jsonify(error=(
+            "solo se revisan los planes creados a mano: pedirle a la IA que "
+            "revise su propio plan no aporta nada"
+        )), 409
+
+    if not plan.meals:
+        return jsonify(error="el plan no tiene comidas: no hay nada que revisar"), 409
+
+    user = db.session.get(User, plan.user_id)
+
+    job = Job(
+        user_id=plan.user_id,
+        plan_id=plan.id,
+        type=TYPE_PLAN_REVIEW,
+        state=PENDING,
+        # El resumen nutricional lo calcula la API, no el worker: sumar los
+        # nutrientes del catálogo son microsegundos y los números tienen que
+        # salir de la tabla, nunca del modelo (3.10).
+        input=ai.build_review_input(user, plan),
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    enqueue(TYPE_PLAN_REVIEW, job.id)
+
+    return _accepted(job)
 
 
 @plans_bp.patch("/<int:plan_id>")

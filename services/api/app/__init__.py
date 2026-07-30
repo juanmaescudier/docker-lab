@@ -54,13 +54,15 @@ def create_app():
     # ---------- Blueprints (un módulo por dominio) ----------
     from .users.routes import users_bp
     from .users.auth import auth_bp
-    from .analysis.routes import analysis_bp
     from .catalog.routes import catalog_bp
     from .recipes.routes import recipes_bp
     from .plans.routes import plans_bp
+    # `jobs` no es un dominio de negocio: es infraestructura de la aplicación,
+    # el único sitio donde se consulta el estado de cualquier trabajo.
+    from .jobs.routes import jobs_bp
     app.register_blueprint(users_bp)
     app.register_blueprint(auth_bp)
-    app.register_blueprint(analysis_bp)
+    app.register_blueprint(jobs_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(recipes_bp)
     app.register_blueprint(plans_bp)

@@ -16,8 +16,8 @@ from app.extensions import db
 # Importar los modelos es lo que los registra en `db.metadata`. Sin esto,
 # `--autogenerate` vería el esquema vacío y propondría BORRAR todas las tablas.
 # Cada dominio nuevo tiene que añadir su línea aquí.
-from app.analysis import models as _analysis  # noqa: F401
 from app.catalog import models as _catalog  # noqa: F401
+from app.jobs import models as _jobs  # noqa: F401
 from app.plans import models as _plans  # noqa: F401
 from app.recipes import models as _recipes  # noqa: F401
 from app.users import models as _users  # noqa: F401
