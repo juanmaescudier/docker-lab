@@ -44,6 +44,8 @@ class StubProvider(LLMProvider):
         return "stub"
 
     def complete(self, prompt):
+        started = time.monotonic()
+
         if self.latency:
             time.sleep(self.latency)
 
@@ -55,5 +57,8 @@ class StubProvider(LLMProvider):
             data=prompt.stub_response,
             raw=raw,
             model=self.model,
+            # La duración sí es real aunque no haya red: mide lo que tarda el
+            # stub, que con LLM_STUB_LATENCY_SECONDS es justo lo que se quiere ver.
+            duration_ms=round((time.monotonic() - started) * 1000, 1),
             extra={"stub": True},
         )

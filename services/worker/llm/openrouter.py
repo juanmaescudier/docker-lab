@@ -10,7 +10,9 @@ Se lee del entorno en cada llamada y los mensajes de error se construyen a mano
 en vez de arrastrar la excepción original, que puede llevar la petición entera
 —cabeceras incluidas— dentro de su representación.
 """
+import json
 import os
+import time
 
 import requests
 
@@ -37,7 +39,23 @@ API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # reconstruir la imagen.
 DEFAULT_MODEL = "openai/gpt-4o-mini"
 
-DEFAULT_TIMEOUT_SECONDS = 120
+# Tope de duración TOTAL de la llamada, en segundos. Sube de 120 a 300 porque con
+# 120 el modelo que se está usando fallaría dos de cada tres veces: cinco
+# generaciones medidas de `deepseek/deepseek-v4-pro` tardaron 118, 146, 150 y
+# 174 s. No es un tope de silencio, es de reloj (ver `_read_within_deadline`).
+DEFAULT_TIMEOUT_SECONDS = 300
+
+# Establecer la conexión es cuestión de milisegundos; si tarda más de esto, el
+# extremo no está. Va aparte del tope total: mezclarlos haría esperar cinco
+# minutos a un servidor que ni siquiera acepta la conexión.
+CONNECT_TIMEOUT_SECONDS = 10
+
+CHUNK_SIZE_BYTES = 8192
+
+# Tope de tamaño del cuerpo. Un servidor que emite sin parar llenaría la memoria
+# del worker antes de vencer ningún plazo. 8 MiB son de sobra: la respuesta más
+# grande medida hasta ahora no llega a 40 KiB.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 # Un plan semanal completo son unas 3.000 fichas de salida con un modelo normal,
 # pero los de razonamiento gastan bastante más antes de escribir la respuesta: uno
 # de ellos consumió 9.500 en una prueba real y con el tope en 16.000 se cortó. El
@@ -145,16 +163,29 @@ class OpenRouterProvider(LLMProvider):
         return body
 
     def complete(self, prompt):
+        # El plazo se cuenta con `monotonic` y no con la hora del sistema: un
+        # ajuste de reloj a mitad de llamada no puede alargarlo ni acortarlo.
+        started = time.monotonic()
+
         try:
-            response = requests.post(
+            # `stream=True` devuelve en cuanto llegan las CABECERAS, sin
+            # descargar el cuerpo. Es lo que permite ir mirando el reloj mientras
+            # se consume la respuesta (ver `_read_within_deadline`).
+            with requests.post(
                 self.api_url,
                 headers=self._headers(),
                 json=self._body(prompt),
-                timeout=self.timeout,
-            )
+                # El primer valor acota la conexión; el segundo, el SILENCIO
+                # entre bytes. Ninguno acota la duración total: eso lo pone el
+                # reloj de `_read_within_deadline`.
+                timeout=(CONNECT_TIMEOUT_SECONDS, self.timeout),
+                stream=True,
+            ) as response:
+                self._raise_for_status(response)
+                body = self._read_within_deadline(response, started)
         except requests.Timeout:
             raise LLMTimeout(
-                f"el modelo no ha respondido en {self.timeout} s"
+                f"el modelo no ha enviado nada en {self.timeout} s"
             ) from None
         except requests.RequestException as exc:
             # Solo el tipo de excepción, nunca su repr: puede llevar la petición
@@ -163,8 +194,63 @@ class OpenRouterProvider(LLMProvider):
                 f"no se ha podido contactar con OpenRouter ({type(exc).__name__})"
             ) from None
 
-        self._raise_for_status(response)
-        return self._parse(response)
+        return self._parse(body, (time.monotonic() - started) * 1000)
+
+    def _read_within_deadline(self, response, started):
+        """Descarga el cuerpo vigilando el reloj. Devuelve el texto.
+
+        **Por qué hace falta esto y no basta con el parámetro `timeout`.** La
+        documentación de `requests` es explícita: el *read timeout* es «el número
+        de segundos que el cliente espera ENTRE bytes enviados por el servidor»,
+        y añade que «ni el timeout de conexión ni el de lectura son de reloj de
+        pared». Cada byte que llega reinicia la cuenta, así que un servidor que
+        gotea mantiene la llamada abierta indefinidamente: con 120 s
+        configurados se midió una llamada de **8 minutos** que no cortó, y dejó
+        al worker bloqueado todo ese rato.
+
+        Se descarta la alarma del sistema operativo (`signal.alarm`), que era la
+        otra vía: solo funciona en el hilo principal, es estado global del
+        proceso —una sola alarma para todo el mundo— y aquí ya hay manejadores
+        de `SIGTERM` y `SIGINT` que no conviene rozar. Este bucle no depende del
+        hilo, no toca señales y cierra la conexión de forma determinista.
+
+        Se descarta también lanzar la llamada en otro hilo con un `Future`: al
+        vencer el plazo el hilo sigue vivo, porque a un hilo de Python no se le
+        puede matar, y cada vencimiento dejaría una conexión abierta y un hilo
+        colgado.
+
+        **Qué garantiza exactamente:** entre trozo y trozo se comprueba el reloj,
+        así que un goteo se corta al llegar al plazo. Un silencio total después
+        de las cabeceras lo corta el *read timeout*, que en el peor caso puede
+        sumarse al plazo; se acepta porque ese caso ya lo cubre `LLMTimeout`
+        igual y evita meter una variable más solo para el peor caso.
+        """
+        chunks = []
+        size = 0
+
+        for chunk in response.iter_content(chunk_size=CHUNK_SIZE_BYTES):
+            elapsed = time.monotonic() - started
+            if elapsed > self.timeout:
+                raise LLMTimeout(
+                    f"la llamada ha superado el tope de {self.timeout} s "
+                    f"(iba por {elapsed:.0f} s y seguía recibiendo datos)"
+                )
+
+            if not chunk:
+                # `iter_content` puede entregar trozos vacíos de keep-alive.
+                continue
+
+            size += len(chunk)
+            if size > MAX_RESPONSE_BYTES:
+                # Un cuerpo sin fin llenaría la memoria del worker antes de que
+                # venciera ningún plazo. El tope va en bytes y no en tokens
+                # porque aquí todavía no se ha parseado nada.
+                raise LLMServiceError(
+                    f"la respuesta supera los {MAX_RESPONSE_BYTES} bytes"
+                )
+            chunks.append(chunk)
+
+        return b"".join(chunks).decode("utf-8", errors="replace")
 
     # ---------- Respuesta ----------
 
@@ -230,13 +316,12 @@ class OpenRouterProvider(LLMProvider):
 
         raise LLMServiceError(f"OpenRouter ha respondido {status}: {message}")
 
-    def _parse(self, response):
+    def _parse(self, body, duration_ms):
         try:
-            payload = response.json()
+            payload = json.loads(body)
         except ValueError:
             raise LLMInvalidJSON(
-                "OpenRouter ha respondido algo que no es JSON: "
-                + response.text[:200]
+                "OpenRouter ha respondido algo que no es JSON: " + body[:200]
             ) from None
 
         # Un fallo del proveedor puede llegar con HTTP 200 y el error dentro del
@@ -280,5 +365,6 @@ class OpenRouterProvider(LLMProvider):
             completion_tokens=usage.get("completion_tokens", 0),
             total_tokens=usage.get("total_tokens", 0),
             cost=usage.get("cost"),
+            duration_ms=round(duration_ms, 1),
             extra={"finish_reason": finish_reason, "id": payload.get("id")},
         )

@@ -108,6 +108,20 @@ def process_job(conn, job_id, provider):
         )
         return
 
+    # Sin esta línea, un trabajo en vuelo no emite nada hasta que termina: una
+    # generación de tres minutos parecía un worker muerto.
+    log.info(
+        "trabajo reclamado",
+        extra={"extra_fields": {
+            "job_id": job_id,
+            "job_type": job["type"],
+            "user_id": job["user_id"],
+            "attempts": job["attempts"],
+            "llm_provider": provider.name,
+            "llm_model": provider.model,
+        }},
+    )
+
     handler = handlers.HANDLERS.get(job["type"])
     if handler is None:
         message = f"tipo de trabajo desconocido: {job['type']}"

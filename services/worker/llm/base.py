@@ -50,6 +50,8 @@ class LLMResponse:
     total_tokens: int = 0
     # Coste en créditos, cuando el proveedor lo informa. El stub no lo tiene.
     cost: float | None = None
+    # Duración de reloj de la llamada, en milisegundos.
+    duration_ms: float = 0.0
     extra: dict = field(default_factory=dict)
 
     def usage_fields(self):
@@ -57,12 +59,17 @@ class LLMResponse:
 
         Primer paso para poder medir el coste: con esto en Kibana se puede
         agregar por modelo y ver qué cuesta cada tipo de trabajo.
+
+        La duración va aquí y no solo en `scripts/try_prompt.py` porque ese
+        script es de usar y tirar: la latencia hay que verla en el código que
+        corre de verdad, que es donde se decide si un tope está bien puesto.
         """
         fields = {
             "llm_model": self.model,
             "llm_prompt_tokens": self.prompt_tokens,
             "llm_completion_tokens": self.completion_tokens,
             "llm_total_tokens": self.total_tokens,
+            "llm_duration_ms": self.duration_ms,
         }
         if self.cost is not None:
             fields["llm_cost"] = self.cost

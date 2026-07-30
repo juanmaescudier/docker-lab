@@ -248,7 +248,10 @@ def main():
         print(f"  total:        {response.total_tokens} tokens")
         if response.cost is not None:
             print(f"  coste:        {response.cost}")
-        print(f"  tiempo:       {elapsed:.1f} s")
+        # El del proveedor es el que acaba en el log JSON; el de fuera incluye
+        # además construir el prompt. Se enseñan los dos para poder compararlos.
+        print(f"  tiempo:       {response.duration_ms / 1000:.1f} s "
+              f"(medido por el proveedor) · {elapsed:.1f} s de reloj")
 
         print("\n--- validación ---")
         try:
