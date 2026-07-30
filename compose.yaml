@@ -4,6 +4,7 @@ networks:
   backend:
     internal: true
   monitoring:
+  egress:
 
 services:
   nutriapp:
@@ -46,7 +47,13 @@ services:
       - DB_NAME=${DB_NAME}
       - QUEUE_REDIS_HOST=${QUEUE_REDIS_HOST}
       - QUEUE_REDIS_PORT=${QUEUE_REDIS_PORT}
-      - TRABAJO_SEGUNDOS=${TRABAJO_SEGUNDOS:-5}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-stub}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_RESPONSE_FORMAT=${LLM_RESPONSE_FORMAT:-json_schema}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-32000}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-120}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.6}
     depends_on:
       redis-queue:
         condition: service_healthy
@@ -57,6 +64,7 @@ services:
     restart: unless-stopped
     networks:
       - backend
+      - egress
 
   postgres:
     image: postgres:18.4
