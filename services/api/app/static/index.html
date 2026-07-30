@@ -48,7 +48,7 @@
     padding: .35rem .8rem; border-radius: 6px; cursor: pointer; font: inherit;
   }
   nav button.tab.on { color: var(--fg); border-color: var(--line); background: var(--panel); }
-  main { padding: 1.2rem; max-width: 1100px; }
+  main { padding: 1.2rem; max-width: 1500px; }
   section.view { display: none; }
   section.view.on { display: block; }
   h2 { font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 .8rem; }
@@ -77,6 +77,28 @@
   .pill.completed { color: var(--ok); border-color: var(--ok); }
   .pill.failed { color: var(--bad); border-color: var(--bad); }
   .pill.processing, .pill.pending { color: var(--warn); border-color: var(--warn); }
+  .pill.activo { color: var(--ok); border-color: var(--ok); }
+  .pill.slot { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .pill.desconocido { color: var(--warn); border-color: var(--warn); }
+  .pill.mano { color: var(--dim); }
+
+  /* Dos planes uno al lado del otro. En pantalla estrecha se apilan solos, que
+     es lo que hace que esto quepa en un fichero sin retorcer nada. */
+  .boards { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+  .boards.dos { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 900px) { .boards.dos { grid-template-columns: 1fr; } }
+  .boards .card { margin-bottom: 0; min-width: 0; }
+  .boards.dos table { font-size: .78rem; }
+  .boards.dos td, .boards.dos th { padding: .3rem .35rem; }
+
+  tr.mirando > td, tr.mirando > th { background: #232833; }
+  td.pick { white-space: nowrap; }
+  td.pick button {
+    padding: .1rem .45rem; font-size: .75rem; margin-right: .2rem;
+    background: none; border: 1px solid var(--line); color: var(--dim); font-weight: 600;
+  }
+  td.pick button.on { border-color: var(--accent); color: var(--accent); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
   .msg { padding: .6rem .8rem; border-radius: 6px; margin-bottom: .8rem; border: 1px solid var(--line); }
   .msg.err { color: var(--bad); border-color: var(--bad); }
   .msg.ok { color: var(--ok); border-color: var(--ok); }
@@ -140,10 +162,16 @@
     </div>
 
     <div class="card">
-      <h2>Plan activo</h2>
-      <div id="plan-head" class="muted">cargando…</div>
-      <div class="scroll"><table class="plan-grid" id="plan-grid"></table></div>
+      <h2>Mis planes</h2>
+      <p class="muted" style="margin:0 0 .8rem">
+        Marca <strong>A</strong> para ver un plan y <strong>B</strong> para ponerlo
+        al lado y compararlos. El modelo, el coste y los tokens salen de cruzar
+        cada plan con su trabajo de generación.
+      </p>
+      <div class="scroll"><table id="plans-table"></table></div>
     </div>
+
+    <div id="boards"></div>
   </section>
 
   <!-- --------------------------------------------------------- perfil -->
@@ -170,6 +198,7 @@
           </select>
         </div>
         <button id="load-shopping">Calcular</button>
+        <span class="muted" id="shopping-plan"></span>
       </div>
       <div id="shopping"></div>
     </div>
@@ -235,8 +264,20 @@ const PROFILE_FIELDS = [
 ];
 
 let me = null;
-let activePlan = null;
 let pollTimer = null;
+
+// Estado de la comparación de planes.
+//   plans       → lo que devuelve GET /plans (el activo primero).
+//   planDetail  → id → plan completo con sus comidas. Hace falta para la parrilla
+//                 y para contar recetas distintas, que no viene en el listado.
+//   genJobByPlan→ id de plan → su trabajo de GENERACIÓN. Sale de UNA sola llamada
+//                 a GET /jobs, que ya trae el `result` en el listado.
+//   viewing/comparing → los dos planes en pantalla.
+let plans = [];
+let planDetail = {};
+let genJobByPlan = {};
+let viewing = null;
+let comparing = null;
 
 // ------------------------------------------------------------------ utilidades
 
@@ -297,7 +338,7 @@ document.querySelectorAll("nav .tab").forEach((button) => {
     const view = button.dataset.view;
     show(view);
     if (view === "trabajos") loadJobs();
-    if (view === "plan") loadActivePlan();
+    if (view === "plan" || view === "compra") loadPlans();
   });
 });
 
@@ -318,7 +359,7 @@ function showApp(user) {
   text($("who"), user.email);
   renderProfile();
   show("plan");
-  loadActivePlan();
+  loadPlans();
 }
 
 // --------------------------------------------------------------------- sesión
@@ -450,7 +491,10 @@ function pollJob(jobId) {
 
       if (data.state === "completed") {
         flash(`plan generado en ${seconds} s`, "ok");
-        loadActivePlan();
+        // El plan nuevo entra en la tabla y pasa a ser el que se está mirando:
+        // es lo que se acaba de pedir, no tiene sentido seguir en el anterior.
+        viewing = data.plan_id;
+        loadPlans();
       } else {
         flash("el trabajo ha fallado: " + (data.error || "sin detalle"), "err");
       }
@@ -461,33 +505,219 @@ function pollJob(jobId) {
   pollTimer = setInterval(tick, 3000);
 }
 
-// ------------------------------------------------------------- plan y parrilla
+// ------------------------------------------------------------- planes
 
-async function loadActivePlan() {
-  const { status, data } = await api("/plans");
-  if (status !== 200) return;
+/** Texto para un dato que no existe porque el plan es manual. */
+const A_MANO = "a mano";
+/** Texto para un dato que debería existir y no aparece. */
+const DESCONOCIDO = "desconocido";
 
-  const active = (data || []).find((p) => p.active);
-  if (!active) {
-    activePlan = null;
-    text($("plan-head"), "no hay ningún plan activo todavía");
-    $("plan-grid").innerHTML = "";
+/**
+ * Carga los planes y todo lo necesario para compararlos.
+ *
+ * Dos llamadas de lista y una por plan:
+ *
+ * - `GET /jobs` UNA sola vez para todos. El listado omite el `input` pero sí
+ *   devuelve el `result`, que es donde el worker deja el modelo, el coste, los
+ *   tokens y la duración. Pedir cada trabajo por separado sería una llamada por
+ *   plan para un dato que ya venía en la lista.
+ * - `GET /plans/<id>` por plan sí hace falta: el listado trae `meal_count`, pero
+ *   las RECETAS DISTINTAS solo se pueden contar teniendo las comidas, y esas no
+ *   vienen en el listado. Se cachean en `planDetail` y las reusan la parrilla, la
+ *   lista de la compra y la ficha de receta, así que se piden una vez por carga.
+ */
+async function loadPlans() {
+  const [planList, jobList] = await Promise.all([api("/plans"), api("/jobs")]);
+  if (planList.status !== 200) return;
+
+  plans = planList.data || [];
+  genJobByPlan = indexGenerationJobs(jobList.status === 200 ? jobList.data : []);
+
+  const details = await Promise.all(plans.map((p) => api(`/plans/${p.id}`)));
+  planDetail = {};
+  details.forEach((response, index) => {
+    if (response.status === 200) planDetail[plans[index].id] = response.data;
+  });
+
+  // Al entrar, se mira el activo; si no hay, el primero que haya.
+  if (!plans.some((p) => p.id === viewing)) {
+    const active = plans.find((p) => p.active);
+    viewing = active ? active.id : (plans[0] ? plans[0].id : null);
+  }
+  if (!plans.some((p) => p.id === comparing)) comparing = null;
+
+  renderPlansTable();
+  renderBoards();
+  renderShoppingHint();
+}
+
+function renderShoppingHint() {
+  const plan = plans.find((p) => p.id === viewing);
+  text($("shopping-plan"), plan ? `del plan «${plan.name}» (la ranura A)` : "");
+}
+
+/**
+ * Cruza los trabajos por `plan_id` y se queda con el que GENERÓ cada plan.
+ *
+ * Filtrar por `type === "plan_generation"` no es un detalle: los trabajos de
+ * REVISIÓN también llevan `plan_id`, y su `result` también trae un `llm_model`.
+ * Sin el filtro, un plan hecho a mano que se hubiera mandado a revisar aparecería
+ * atribuido al modelo que lo revisó, que es justo lo contrario de lo que se
+ * quiere saber. En esta base de datos pasa de verdad con dos planes.
+ */
+function indexGenerationJobs(jobs) {
+  const index = {};
+  for (const job of jobs || []) {
+    if (job.type !== "plan_generation" || !job.plan_id) continue;
+    const previous = index[job.plan_id];
+    // Si hubiera varios, manda el completado; entre iguales, el más reciente.
+    const better = !previous
+      || (job.state === "completed" && previous.state !== "completed")
+      || (job.state === previous.state && job.id > previous.id);
+    if (better) index[job.plan_id] = job;
+  }
+  return index;
+}
+
+/**
+ * Los datos de comparación de un plan. Nunca devuelve una celda vacía.
+ *
+ * Un hueco en blanco no distingue «no hay dato» de «se ha roto algo», así que
+ * cada campo cae en uno de tres casos: el valor, «a mano» cuando el plan no lo
+ * hizo ninguna IA, o «desconocido» cuando debería haber un trabajo y no está.
+ */
+function planInfo(plan) {
+  const detail = planDetail[plan.id];
+  const meals = detail ? detail.meals : [];
+  const recipes = detail ? new Set(meals.map((m) => m.recipe_id)).size : null;
+
+  const base = {
+    meals: detail ? meals.length : plan.meal_count,
+    recipes: recipes === null ? DESCONOCIDO : String(recipes),
+    date: new Date(plan.created_at).toLocaleString("es-ES"),
+  };
+
+  if (plan.source !== "ai") {
+    return { ...base, kind: "mano", model: A_MANO,
+             cost: A_MANO, duration: A_MANO, tokens: A_MANO };
+  }
+
+  const job = genJobByPlan[plan.id];
+  const result = job && job.result;
+  if (!result || !result.llm_model) {
+    return { ...base, kind: "desconocido", model: DESCONOCIDO,
+             cost: DESCONOCIDO, duration: DESCONOCIDO, tokens: DESCONOCIDO };
+  }
+
+  return {
+    ...base,
+    kind: "ia",
+    model: result.llm_model,
+    cost: result.llm_cost === undefined || result.llm_cost === null
+      ? DESCONOCIDO : "$" + Number(result.llm_cost).toFixed(5),
+    duration: result.llm_duration_ms
+      ? (result.llm_duration_ms / 1000).toFixed(1) + " s" : DESCONOCIDO,
+    // Los de SALIDA: son los que se disparan con los modelos de razonamiento y
+    // los que mandan en el coste.
+    tokens: result.llm_completion_tokens === undefined
+      ? DESCONOCIDO : String(result.llm_completion_tokens),
+  };
+}
+
+/** Celda que se pinta distinto si lo que lleva es un «desconocido». */
+function cell(value, extraClass = "") {
+  const pill = value === DESCONOCIDO ? "desconocido" : (value === A_MANO ? "mano" : "");
+  const content = pill ? `<span class="pill ${pill}">${value}</span>` : escapeHtml(value);
+  return `<td class="${extraClass}">${content}</td>`;
+}
+
+function renderPlansTable() {
+  if (!plans.length) {
+    $("plans-table").innerHTML =
+      '<tbody><tr><td class="muted">todavía no hay ningún plan</td></tr></tbody>';
     return;
   }
 
-  const full = await api(`/plans/${active.id}`);
-  if (full.status !== 200) return;
-  activePlan = full.data;
+  let html = "<thead><tr><th>ver</th><th>plan</th><th>fecha</th><th>estado</th>" +
+             "<th>modelo</th><th class='num'>coste</th><th class='num'>tiempo</th>" +
+             "<th class='num'>tokens salida</th><th class='num'>recetas</th>" +
+             "<th class='num'>comidas</th></tr></thead><tbody>";
 
-  $("plan-head").innerHTML =
-    `<strong>${escapeHtml(activePlan.name)}</strong> · origen: ${activePlan.source} · ` +
-    `${activePlan.meals.length} comidas · creado el ` +
-    new Date(activePlan.created_at).toLocaleString("es-ES");
+  for (const plan of plans) {
+    const info = planInfo(plan);
+    const mirando = plan.id === viewing || plan.id === comparing;
 
-  renderPlanGrid(activePlan);
+    html += `<tr class="${mirando ? "mirando" : ""}">
+      <td class="pick">
+        <button data-pick="a" data-plan="${plan.id}" class="${plan.id === viewing ? "on" : ""}">A</button>
+        <button data-pick="b" data-plan="${plan.id}" class="${plan.id === comparing ? "on" : ""}">B</button>
+      </td>
+      <td>${escapeHtml(plan.name)}</td>
+      <td class="muted">${info.date}</td>
+      <td>${plan.active ? '<span class="pill activo">activo</span>' : '<span class="muted">archivado</span>'}</td>`;
+    html += cell(info.model);
+    html += cell(info.cost, "num");
+    html += cell(info.duration, "num");
+    html += cell(info.tokens, "num");
+    html += cell(info.recipes, "num");
+    html += `<td class="num">${info.meals}</td></tr>`;
+  }
+  html += "</tbody>";
+
+  $("plans-table").innerHTML = html;
+
+  $("plans-table").querySelectorAll("td.pick button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = Number(button.dataset.plan);
+      if (button.dataset.pick === "a") {
+        viewing = id;
+        // Comparar un plan consigo mismo no dice nada: se suelta la ranura B.
+        if (comparing === id) comparing = null;
+      } else if (comparing === id) {
+        comparing = null;               // volver a pulsar B lo quita
+      } else if (viewing !== id) {
+        comparing = id;
+      }
+      renderPlansTable();
+      renderBoards();
+      renderShoppingHint();
+    });
+  });
 }
 
-function renderPlanGrid(plan) {
+// ------------------------------------------------------------------- parrillas
+
+/** Pinta una parrilla por cada ranura ocupada: una sola, o dos en paralelo. */
+function renderBoards() {
+  const shown = [viewing, comparing].filter((id) => id !== null && planDetail[id]);
+  const container = $("boards");
+  container.className = "boards" + (shown.length === 2 ? " dos" : "");
+
+  if (!shown.length) {
+    container.innerHTML =
+      '<div class="card"><p class="muted">elige un plan en la tabla de arriba</p></div>';
+    return;
+  }
+
+  container.innerHTML = shown.map((id, index) => {
+    const plan = planDetail[id];
+    const info = planInfo(plans.find((p) => p.id === id));
+    const slot = index === 0 ? "A" : "B";
+    return `<div class="card">
+      <h2><span class="pill slot">${slot}</span> ${escapeHtml(plan.name)}</h2>
+      <p class="muted" style="margin:0 0 .8rem">
+        ${plan.active ? '<span class="pill activo">activo</span>' : '<span class="pill">archivado</span>'}
+        · ${escapeHtml(info.model)} · ${escapeHtml(info.recipes)} recetas distintas
+        en ${info.meals} comidas · ${info.date}
+      </p>
+      <div class="scroll"><table class="plan-grid" data-plan="${id}"></table></div>
+    </div>`;
+  }).join("");
+
+  for (const id of shown) fillGrid(container.querySelector(`table[data-plan="${id}"]`), planDetail[id]);
+}
+
+function fillGrid(table, plan) {
   // Solo los momentos del día que el plan usa de verdad: enseñar cinco columnas
   // cuando el usuario hace tres comidas llena la parrilla de huecos.
   const usedSlots = SLOTS.filter((slot) => plan.meals.some((m) => m.meal_slot === slot));
@@ -512,9 +742,9 @@ function renderPlanGrid(plan) {
   }
   html += "</tbody>";
 
-  $("plan-grid").innerHTML = html;
-  $("plan-grid").querySelectorAll("td.meal").forEach((cell) =>
-    cell.addEventListener("click", () => openRecipe(cell.dataset.recipe)));
+  table.innerHTML = html;
+  table.querySelectorAll("td.meal").forEach((cellEl) =>
+    cellEl.addEventListener("click", () => openRecipe(cellEl.dataset.recipe)));
 }
 
 // ---------------------------------------------------------------- ficha receta
@@ -569,13 +799,13 @@ $("close-recipe").addEventListener("click", () => $("recipe-dialog").close());
 // -------------------------------------------------------- lista de la compra
 
 $("load-shopping").addEventListener("click", async () => {
-  if (!activePlan) {
-    await loadActivePlan();
-    if (!activePlan) return flash("no hay plan activo del que hacer la lista", "err");
-  }
+  // La lista es del plan que se está mirando (la ranura A), no del activo: si
+  // no, comparar dos planes daría siempre la compra del mismo.
+  if (viewing === null) await loadPlans();
+  if (viewing === null) return flash("no hay ningún plan del que hacer la lista", "err");
 
   const weeks = $("weeks").value;
-  const { status, data } = await api(`/plans/${activePlan.id}/shopping-list?weeks=${weeks}`);
+  const { status, data } = await api(`/plans/${viewing}/shopping-list?weeks=${weeks}`);
   if (status !== 200) return flash(apiError(data, "no se ha podido calcular"), "err");
 
   let html = `<p class="muted" style="margin-top:1rem">${escapeHtml(data.plan)} · ${data.weeks} semana(s) · ` +
