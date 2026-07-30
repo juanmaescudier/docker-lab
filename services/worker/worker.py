@@ -1,44 +1,70 @@
-"""Consumidor de la cola de análisis nutricionales.
+"""Consumidor de la cola de trabajos.
 
-Proceso sin HTTP: lee trabajos de una lista de Redis y actualiza su estado en
-PostgreSQL. Usa SQL directo en lugar del ORM de la API para no depender de Flask
-ni de SQLAlchemy.
+Proceso sin HTTP: lee identificadores de trabajo de una lista de Redis, los
+procesa y actualiza su estado en PostgreSQL.
+
+**A la cola va lo lento, lo poco fiable o lo que hay que reintentar.** Sumar seis
+ingredientes son microsegundos y pertenece a la API; llamar a un modelo de
+lenguaje tarda decenas de segundos y pertenece aquí. Por eso el worker ya no
+calcula nutrición: eso lo hace `Recipe.nutrition_summary()` desde el catálogo,
+con los números buenos.
 """
 import json
-import logging
 import os
 import signal
-import sys
-import time
+import threading
 
-import psycopg
 import redis
 
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO"),
-    stream=sys.stdout,
-    format='{"@timestamp":"%(asctime)s","level":"%(levelname)s",'
-           '"service":"worker","logger":"%(name)s","message":"%(message)s"}',
-)
-log = logging.getLogger("worker")
+import db
+import handlers
+import logging_config
+from llm import get_provider
+from llm.errors import LLMError, LLMRateLimited
 
-# Contrato con la API: el nombre de la lista y el campo 'type' del mensaje tienen
-# que coincidir exactamente con los de app/queue.py, o dejan de entenderse.
-ANALYSIS_QUEUE = "queue:analysis"
-JOB_NUTRITIONAL_ANALYSIS = "nutritional_analysis"
+log = logging_config.configure()
 
-_stop = False
+# Contrato con la API: el nombre de la lista y el formato del mensaje tienen que
+# coincidir exactamente con los de `app/queue.py`, o dejan de entenderse.
+JOBS_QUEUE = "queue:jobs"
+
+# Cada cuánto se comprueba si han pedido parar. Con espera indefinida en BRPOP el
+# contenedor no podría apagarse limpiamente.
+BRPOP_TIMEOUT_SECONDS = 5
+
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_BACKOFF_SECONDS = 2.0
+DEFAULT_BACKOFF_MAX_SECONDS = 60.0
+
+# Un Event y no un booleano suelto: `wait()` corta en cuanto se marca, así que la
+# espera entre reintentos no retrasa el apagado hasta un minuto.
+_stop = threading.Event()
 
 
 def _handle_signal(signum, frame):
-    """Marca la parada para terminar el trabajo en curso antes de salir."""
-    global _stop
-    log.info("recibida señal %s: termino el trabajo actual y salgo", signum)
-    _stop = True
+    log.info(
+        "señal recibida: termino el trabajo actual y salgo",
+        extra={"extra_fields": {"signal": signum}},
+    )
+    _stop.set()
 
 
 signal.signal(signal.SIGTERM, _handle_signal)
 signal.signal(signal.SIGINT, _handle_signal)
+
+
+def _int_env(name, default):
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def _float_env(name, default):
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
 
 
 def connect_redis():
@@ -49,148 +75,164 @@ def connect_redis():
     )
 
 
-def connect_postgres():
-    # autocommit para que los cambios de estado sean visibles de inmediato
-    # para la API, sin esperar al final de una transacción.
-    return psycopg.connect(
-        host=os.environ["DB_HOST"],
-        port=int(os.environ.get("DB_PORT", "5432")),
-        dbname=os.environ["DB_NAME"],
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        autocommit=True,
-    )
+def _backoff_seconds(attempt, error):
+    """Espera creciente: 2 s, 4 s, 8 s… con tope.
 
-
-# Marcador de posición hasta integrar el modelo de lenguaje.
-KCAL_PER_100G = {
-    "manzana": 52, "platano": 89, "pollo": 165, "arroz": 130,
-    "huevo": 155, "salmon": 208, "pan": 265, "leche": 42,
-    "pasta": 131, "atun": 132, "aguacate": 160, "yogur": 59,
-}
-
-
-def analyze_nutrition(job_input):
-    """Calcula las calorías de una lista de alimentos.
-
-    Acepta cada alimento como cadena ("manzana") o como diccionario
-    ({"name": "manzana", "grams": 150}).
+    Creciente y no fija porque los fallos que se reintentan son casi siempre de
+    saturación: volver a golpear al mismo ritmo empeora justo lo que se espera
+    que se arregle solo.
     """
-    foods = job_input.get("foods", [])
+    base = _float_env("JOB_RETRY_BACKOFF_SECONDS", DEFAULT_BACKOFF_SECONDS)
+    top = _float_env("JOB_RETRY_BACKOFF_MAX_SECONDS", DEFAULT_BACKOFF_MAX_SECONDS)
 
-    details = []
-    total = 0.0
-    unknown = []
+    delay = min(base * (2 ** (attempt - 1)), top)
 
-    for item in foods:
-        if isinstance(item, dict):
-            name = str(item.get("name", "")).lower()
-            grams = float(item.get("grams", 100))
-        else:
-            name = str(item).lower()
-            grams = 100.0
+    # Si el proveedor dice cuánto esperar en un 429, se le hace caso: sabe mejor
+    # que nosotros cuándo vuelve a aceptar peticiones.
+    if isinstance(error, LLMRateLimited) and error.retry_after:
+        delay = max(delay, min(error.retry_after, top))
 
-        kcal_100 = KCAL_PER_100G.get(name)
-        if kcal_100 is None:
-            unknown.append(name)
-            continue
-
-        kcal = kcal_100 * grams / 100
-        total += kcal
-        details.append({"name": name, "grams": grams, "kcal": round(kcal, 1)})
-
-    # Latencia simulada: representa el coste de la futura llamada al modelo.
-    time.sleep(float(os.environ.get("TRABAJO_SEGUNDOS", "5")))
-
-    return {
-        "details": details,
-        "total_kcal": round(total, 1),
-        "unknown_foods": unknown,
-        "method": "static-table-stub",
-    }
+    return delay
 
 
-def process_analysis(pg, analysis_id):
-    """Ejecuta un análisis y refleja el resultado en su fila."""
-    with pg.cursor() as cur:
-        # El filtro por estado evita procesar dos veces el mismo trabajo si
-        # llegara duplicado a la cola.
-        cur.execute(
-            """
-            UPDATE analyses
-               SET state = 'processing',
-                   attempts = attempts + 1,
-                   updated_at = NOW()
-             WHERE id = %s AND state IN ('pending', 'failed')
-         RETURNING input
-            """,
-            (analysis_id,),
+def process_job(conn, job_id, provider):
+    """Procesa un trabajo de principio a fin, con sus reintentos."""
+    job = db.claim_job(conn, job_id)
+
+    if job is None:
+        # Ya está en curso o terminado: el mensaje llegó duplicado. No es un
+        # error, es la protección funcionando.
+        log.warning(
+            "el trabajo no está pendiente, lo ignoro",
+            extra={"extra_fields": {"job_id": job_id}},
         )
-        row = cur.fetchone()
-
-    if row is None:
-        log.warning("analisis %s no está pendiente, lo ignoro", analysis_id)
         return
 
-    job_input = row[0]
+    handler = handlers.HANDLERS.get(job["type"])
+    if handler is None:
+        message = f"tipo de trabajo desconocido: {job['type']}"
+        log.error(message, extra={"extra_fields": {"job_id": job_id}})
+        db.fail_job(conn, job_id, message)
+        return
 
-    try:
-        result = analyze_nutrition(job_input)
-    except Exception as exc:
-        # Un trabajo que falla no debe detener el consumidor.
-        log.exception("analisis %s ha fallado", analysis_id)
-        with pg.cursor() as cur:
-            cur.execute(
-                "UPDATE analyses SET state='failed', error=%s, updated_at=NOW() WHERE id=%s",
-                (str(exc), analysis_id),
+    max_attempts = max(1, _int_env("JOB_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS))
+
+    def log_response(response):
+        """Deja el consumo de cada llamada en el log JSON.
+
+        Es el primer paso para poder medir el coste: con estos campos en Kibana
+        se agrega por modelo y se ve qué cuesta cada tipo de trabajo. Métricas de
+        Prometheus todavía no: un proceso sin servidor HTTP no tiene por dónde
+        exponerlas, y eso es una decisión de infraestructura aparte.
+        """
+        log.info(
+            "llamada al modelo completada",
+            extra={"extra_fields": {
+                "job_id": job_id,
+                "job_type": job["type"],
+                "llm_provider": provider.name,
+                **response.usage_fields(),
+            }},
+        )
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = handler(conn, job, provider, log_response)
+
+        except LLMError as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            will_retry = exc.retryable and attempt < max_attempts
+
+            log.warning(
+                "el trabajo ha fallado",
+                extra={"extra_fields": {
+                    "job_id": job_id,
+                    "job_type": job["type"],
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "will_retry": will_retry,
+                    "error": error,
+                }},
             )
-        return
 
-    with pg.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE analyses
-               SET state = 'completed',
-                   result = %s,
-                   error = NULL,
-                   updated_at = NOW()
-             WHERE id = %s
-            """,
-            (psycopg.types.json.Json(result), analysis_id),
-        )
+            if not will_retry:
+                db.fail_job(conn, job_id, error)
+                return
 
-    log.info("analisis %s completado: %s kcal", analysis_id, result["total_kcal"])
+            # Se anota el error aunque el trabajo siga vivo: si al final agota
+            # los intentos, el mensaje ya está puesto, y mientras tanto se ve en
+            # `GET /jobs/<id>` por qué está tardando.
+            db.record_attempt(conn, job_id, error)
+
+            # `wait` devuelve True si han pedido parar: se abandona el reintento
+            # en lugar de hacer esperar al contenedor a que se agote la cuenta.
+            if _stop.wait(_backoff_seconds(attempt, exc)):
+                db.fail_job(
+                    conn, job_id,
+                    f"{error} (el worker se estaba apagando y no ha reintentado)",
+                )
+                return
+
+        except Exception as exc:
+            # Un fallo inesperado no debe tumbar al consumidor: se marca el
+            # trabajo como fallido y se sigue atendiendo la cola.
+            log.exception(
+                "excepción no controlada procesando el trabajo",
+                extra={"extra_fields": {"job_id": job_id, "job_type": job["type"]}},
+            )
+            db.fail_job(conn, job_id, f"{type(exc).__name__}: {exc}")
+            return
+
+        else:
+            db.complete_job(conn, job_id, result)
+            log.info(
+                "trabajo completado",
+                extra={"extra_fields": {
+                    "job_id": job_id,
+                    "job_type": job["type"],
+                    "attempts": attempt,
+                    "plan_id": result.get("plan_id"),
+                }},
+            )
+            return
 
 
 def main():
-    r = connect_redis()
-    pg = connect_postgres()
-    log.info("worker arrancado, esperando trabajos en %s", ANALYSIS_QUEUE)
+    provider = get_provider()
+    redis_client = connect_redis()
+    conn = db.connect()
 
-    while not _stop:
-        # El timeout permite revisar la bandera de parada periódicamente;
-        # con espera indefinida el contenedor no podría apagarse limpiamente.
-        item = r.brpop(ANALYSIS_QUEUE, timeout=5)
+    log.info(
+        "worker arrancado",
+        extra={"extra_fields": {
+            "queue": JOBS_QUEUE,
+            "llm_provider": provider.name,
+            "llm_model": provider.model,
+        }},
+    )
+
+    while not _stop.is_set():
+        item = redis_client.brpop(JOBS_QUEUE, timeout=BRPOP_TIMEOUT_SECONDS)
         if item is None:
             continue
 
         _, message = item
 
         try:
-            job = json.loads(message)
-        except json.JSONDecodeError:
-            log.error("mensaje ilegible, lo descarto: %r", message)
+            job_id = json.loads(message)["job_id"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            # Un mensaje ilegible no tiene fila que marcar: se descarta y se
+            # sigue. Se registra recortado porque es la única pista que queda.
+            log.error(
+                "mensaje ilegible, lo descarto",
+                extra={"extra_fields": {"message": message[:500]}},
+            )
             continue
 
-        job_type = job.get("type")
-
-        if job_type == JOB_NUTRITIONAL_ANALYSIS:
-            process_analysis(pg, job["analysis_id"])
-        else:
-            log.error("tipo de trabajo desconocido: %s", job_type)
+        process_job(conn, job_id, provider)
 
     log.info("worker detenido limpiamente")
-    pg.close()
+    conn.close()
 
 
 if __name__ == "__main__":
