@@ -22,15 +22,25 @@ determinista y a la segunda suele acertar.
 """
 from domain import COOKING_METHODS, DAYS_OF_WEEK, MEAL_SLOTS
 from llm.errors import LLMSchemaError
+# El rango de recetas es una decisión de producto y vive en `prompts.py`, que es
+# donde se le pide al modelo. Aquí se importa en vez de repetirlo para que
+# cambiarlo allí surta efecto también en la validación.
+from prompts import MAX_RECIPES, MIN_RECIPES
 
 # Topes de cordura. No son reglas de nutrición: son el filtro que evita escribir
 # en la base de datos un plan absurdo (una receta de 90 kg de arroz) cuando el
 # modelo se despista con las unidades.
 MAX_GRAMS_PER_INGREDIENT = 2000
 MAX_INGREDIENTS_PER_RECIPE = 20
-MAX_RECIPES = 40
 MAX_MEALS = 70
 MAX_SERVINGS = 12
+
+# **No confundir con `prompts.MAX_RECIPES`, que vale 14.** Aquel dice cuántos
+# platos distintos tiene sentido que cocine una persona en una semana: es
+# producto, y se ajusta. Este es el punto en el que la respuesta deja de ser un
+# plan y pasa a ser una avería; existe solo para no recorrer y escribir una
+# respuesta absurda. Por eso está muy por encima y no se toca al afinar el prompt.
+HARD_MAX_RECIPES = 40
 
 
 def _fail(message):
@@ -70,8 +80,8 @@ def validate_plan(data, allowed_food_ids):
     raw_recipes = data.get("recipes")
     if not isinstance(raw_recipes, list) or not raw_recipes:
         _fail("'recipes' debe ser una lista no vacía")
-    if len(raw_recipes) > MAX_RECIPES:
-        _fail(f"demasiadas recetas: {len(raw_recipes)} (máximo {MAX_RECIPES})")
+    if len(raw_recipes) > HARD_MAX_RECIPES:
+        _fail(f"demasiadas recetas: {len(raw_recipes)} (tope duro {HARD_MAX_RECIPES})")
 
     recipes = []
     refs = {}
@@ -190,6 +200,25 @@ def validate_plan(data, allowed_food_ids):
         recipes = [recipes[old] for old in keep]
         for meal in meals:
             meal["recipe_index"] = remap[meal["recipe_index"]]
+
+    # El rango se comprueba DESPUÉS de descartar las huérfanas: lo que importa es
+    # cuántas recetas distintas se come de verdad, no cuántas venían en el JSON.
+    #
+    # Y se comprueba aunque el esquema ya lo diga, por lo mismo que todo lo demás
+    # de este módulo: con `LLM_RESPONSE_FORMAT` en `json_object` o en `none` no
+    # hay esquema que lo imponga, y ahí el mínimo tiene que sostenerse solo. Es
+    # justo el caso en el que hoy un modelo podía colar una sola receta para las
+    # 28 comidas de la semana y el plan se guardaba sin una queja.
+    if len(recipes) < MIN_RECIPES:
+        _fail(
+            f"el plan solo trae {len(recipes)} recetas distintas y se piden al "
+            f"menos {MIN_RECIPES}: una semana con tan pocos platos no es un plan"
+        )
+    if len(recipes) > MAX_RECIPES:
+        _fail(
+            f"el plan trae {len(recipes)} recetas distintas y el máximo es "
+            f"{MAX_RECIPES}: nadie cocina tantos platos distintos en una semana"
+        )
 
     return {
         "plan_name": _text(data, "plan_name", "el plan", max_length=160,

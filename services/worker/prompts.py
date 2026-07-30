@@ -15,11 +15,18 @@ import json
 from domain import COOKING_METHODS, DAYS_OF_WEEK, MEAL_SLOTS, slots_for
 from llm.base import Prompt
 
-# Techo de recetas distintas que se le piden. Una semana entera con receta nueva
-# en cada comida serían 35, y eso es una respuesta enorme, cara y poco realista:
-# nadie cocina 35 platos distintos a la semana. Se reutilizan.
-MAX_RECIPES = 14
+# Cuántas recetas distintas debe traer un plan semanal. Es una decisión de
+# PRODUCTO —cuántos platos distintos cocina una persona en una semana—, no un
+# tope técnico: el de cordura vive en `validation.HARD_MAX_RECIPES` y es otra
+# cosa. Una semana entera con receta nueva en cada comida serían 35, que es una
+# respuesta enorme, cara y que nadie cocina.
+#
+# **Estas dos constantes son el único sitio donde vive el rango.** Cambiarlas
+# surte efecto en los tres sitios que importan: el texto del prompt, el esquema
+# JSON que impone el proveedor (`minItems`/`maxItems`) y la validación propia,
+# que es la que sostiene el mínimo cuando no hay esquema.
 MIN_RECIPES = 5
+MAX_RECIPES = 14
 
 
 # ---------------------------------------------------------------- generación
@@ -132,7 +139,15 @@ PLAN_SCHEMA = {
             ),
         },
         "notes": {"type": "string"},
-        "recipes": {"type": "array", "items": RECIPE_SCHEMA, "minItems": 1},
+        # El rango va aquí y no solo en la prosa de la regla 6: con salida
+        # estructurada estricta lo impone el proveedor, que es la vía más barata
+        # —no gasta un reintento— para que se cumpla.
+        "recipes": {
+            "type": "array",
+            "items": RECIPE_SCHEMA,
+            "minItems": MIN_RECIPES,
+            "maxItems": MAX_RECIPES,
+        },
         "meals": {"type": "array", "items": MEAL_SCHEMA, "minItems": 1},
     },
     "required": ["plan_name", "daily_kcal_target", "notes", "recipes", "meals"],
@@ -167,10 +182,16 @@ def _stub_plan(job_input):
     foods = job_input.get("foods") or []
     slots = slots_for((job_input.get("profile") or {}).get("meals_per_day"))
 
+    # Tantas recetas como momentos del día, pero nunca menos del mínimo exigido:
+    # el stub pasa por el MISMO validador que un modelo real, así que una
+    # respuesta suya por debajo del rango sería un fallo de los tests, no del
+    # modelo. Al depender de la constante, subir el mínimo no rompe el stub.
+    recipe_count = max(len(slots), MIN_RECIPES)
+
     # Se reparten en grupos para que cada receta lleve ingredientes distintos:
     # el mismo alimento dos veces en una receta lo rechaza la base de datos.
     recipes = []
-    for index, slot in enumerate(slots):
+    for index in range(recipe_count):
         chunk = foods[index * 2:index * 2 + 2] or foods[:2]
         recipes.append({
             "ref": f"r{index + 1}",
@@ -183,15 +204,20 @@ def _stub_plan(job_input):
             ],
         })
 
+    # Rotando sobre todas las recetas, no una fija por momento del día: la
+    # validación descarta las recetas que no se comen en ninguna comida, y una
+    # receta huérfana bajaría el recuento por debajo del mínimo.
     meals = [
         {
             "day_of_week": day,
             "meal_slot": slot,
-            "recipe_ref": recipes[index]["ref"],
+            "recipe_ref": recipes[
+                (day_index * len(slots) + slot_index) % recipe_count
+            ]["ref"],
             "servings": 1.0,
         }
-        for day in DAYS_OF_WEEK
-        for index, slot in enumerate(slots)
+        for day_index, day in enumerate(DAYS_OF_WEEK)
+        for slot_index, slot in enumerate(slots)
     ]
 
     return {
