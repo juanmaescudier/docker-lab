@@ -2,3 +2,7 @@
 
 redis==5.2.1
 psycopg[binary]==3.2.9
+
+# Cliente HTTP para hablar con OpenRouter. Es la única dependencia que se añade
+# al pasar del stub a un proveedor real: el worker sigue sin Flask ni SQLAlchemy.
+requests==2.34.2
