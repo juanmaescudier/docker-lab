@@ -14,8 +14,6 @@ DAYS_OF_WEEK = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 )
 
-MEAL_SLOTS = ("breakfast", "mid_morning", "lunch", "afternoon_snack", "dinner")
-
 COOKING_METHODS = (
     "raw", "boiled", "steamed", "microwaved", "griddled", "sauteed", "baked",
     "air_fried", "fried", "stewed",
@@ -23,22 +21,28 @@ COOKING_METHODS = (
 
 SOURCE_AI = "ai"
 
-# Qué momentos del día se piden según las comidas que haga el usuario. Repartir
-# cuatro comidas como desayuno, comida, merienda y cena es más razonable que
-# quedarse con los cuatro primeros de la lista, que dejaría fuera la cena.
-SLOTS_BY_MEALS_PER_DAY = {
-    1: ("lunch",),
-    2: ("lunch", "dinner"),
-    3: ("breakfast", "lunch", "dinner"),
-    4: ("breakfast", "lunch", "afternoon_snack", "dinner"),
-    5: MEAL_SLOTS,
-}
+# **Una comida se identifica por su posición dentro del día, no por un nombre**
+# (3.16). Había una lista cerrada de cinco momentos y se rompía con un caso real:
+# quien come ocho veces al día no cabe en cinco casillas, y ampliarla a ocho solo
+# mueve el problema al noveno.
+#
+# Lo estable son tres ANCLAS —desayuno, comida y cena— y el resto de comidas
+# repartidas entre ellas. Eso es lo que se le explica al modelo, en vez de darle
+# una lista de nombres.
+MIN_POSITION = 1
+MAX_POSITION = 10
+MEAL_ANCHORS = ("desayuno", "comida", "cena")
 
 DEFAULT_MEALS_PER_DAY = 3
 
 
-def slots_for(meals_per_day):
-    """Momentos del día que se le piden al modelo para un perfil."""
-    if not isinstance(meals_per_day, int) or meals_per_day not in SLOTS_BY_MEALS_PER_DAY:
-        meals_per_day = DEFAULT_MEALS_PER_DAY
-    return SLOTS_BY_MEALS_PER_DAY[meals_per_day]
+def meals_per_day_for(profile_value):
+    """Cuántas comidas al día se le piden al modelo para un perfil.
+
+    Un perfil sin la respuesta cae al valor por defecto; uno fuera de rango se
+    recorta en vez de rechazarse, porque la API ya lo valida al guardarlo y aquí
+    no hay a quién devolverle un 400.
+    """
+    if isinstance(profile_value, bool) or not isinstance(profile_value, int):
+        return DEFAULT_MEALS_PER_DAY
+    return max(MIN_POSITION, min(profile_value, MAX_POSITION))

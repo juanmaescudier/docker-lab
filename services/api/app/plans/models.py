@@ -14,7 +14,18 @@ from ..extensions import db
 DAYS_OF_WEEK = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 )
-MEAL_SLOTS = ("breakfast", "mid_morning", "lunch", "afternoon_snack", "dinner")
+
+# Cuántas comidas puede tener un día. Es el mismo rango que `users.meals_per_day`
+# y por el mismo motivo: hay quien come ocho veces al día.
+MIN_POSITION = 1
+MAX_POSITION = 10
+
+# Lo estable de un día NO es una lista de cinco nombres, son **tres anclas**
+# —desayuno, comida y cena— y N comidas repartidas entre ellas (3.16). Aquí no
+# hay lista cerrada de momentos: una comida se identifica por su POSICIÓN dentro
+# del día, y la etiqueta ("Media mañana") es texto descriptivo para la pantalla.
+MEAL_ANCHORS = ("desayuno", "comida", "cena")
+MAX_LABEL_LENGTH = 40
 
 SOURCE_AI = "ai"
 SOURCE_MANUAL = "manual"
@@ -72,14 +83,16 @@ class Plan(db.Model):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
         if include_meals:
-            # Ordenadas por día y momento de la semana, no alfabéticamente:
-            # "domingo" antes que "lunes" no es una parrilla, es una lista.
+            # Ordenadas por día y por posición dentro del día, no alfabéticamente:
+            # "domingo" antes que "lunes" no es una parrilla, es una lista. La
+            # posición ya viene ordenada de fábrica, que es media razón para que
+            # sea un número y no un nombre de lista.
             data["meals"] = [
                 m.to_dict() for m in sorted(
                     self.meals,
                     key=lambda m: (
                         DAYS_OF_WEEK.index(m.day_of_week) if m.day_of_week in DAYS_OF_WEEK else 99,
-                        MEAL_SLOTS.index(m.meal_slot) if m.meal_slot in MEAL_SLOTS else 99,
+                        m.position,
                     ),
                 )
             ]
@@ -97,7 +110,16 @@ class PlannedMeal(db.Model):
         nullable=False, index=True,
     )
     day_of_week = db.Column(db.String(10), nullable=False)
-    meal_slot = db.Column(db.String(15), nullable=False)
+
+    # **La clave de la comida dentro del día es su posición, no su nombre** (3.16).
+    # Una lista cerrada de cinco momentos se rompe con un caso real —hay quien
+    # come ocho veces al día— y ampliarla a ocho solo mueve el problema al noveno.
+    position = db.Column(db.Integer, nullable=False)
+    # La etiqueta ("Desayuno", "Media mañana") es solo texto para enseñar en
+    # pantalla, y la escribe quien compone el plan. Nulable a propósito: si no la
+    # hay, la interfaz enseña la posición y no se pierde nada.
+    label = db.Column(db.String(MAX_LABEL_LENGTH))
+
     # RESTRICT por el mismo motivo que en los ingredientes: borrar una receta no
     # debe dejar agujeros silenciosos en los planes que la usan.
     recipe_id = db.Column(
@@ -112,13 +134,31 @@ class PlannedMeal(db.Model):
 
     __table_args__ = (
         db.CheckConstraint("servings > 0", name="ck_planned_meals_servings_positive"),
+        # `position` va entrecomillado: en SQL es el nombre de una función
+        # estándar (`POSITION(x IN y)`) y PostgreSQL solo lo acepta como columna
+        # si no hay ambigüedad. En una expresión suelta la hay.
+        db.CheckConstraint(
+            f'"position" BETWEEN {MIN_POSITION} AND {MAX_POSITION}',
+            name="ck_planned_meals_position_range",
+        ),
+        # El único índice único que tiene sentido: dos comidas distintas no pueden
+        # ocupar el mismo hueco del mismo día. Lo garantiza la BASE DE DATOS y no
+        # solo la validación, que es lo que impide que una escritura concurrente o
+        # un worker reintentado dejen la parrilla con dos "tercera comida" del
+        # martes.
+        db.Index(
+            "uq_meal_position_per_day",
+            "plan_id", "day_of_week", "position",
+            unique=True,
+        ),
     )
 
     def to_dict(self):
         return {
             "id": self.id,
             "day_of_week": self.day_of_week,
-            "meal_slot": self.meal_slot,
+            "position": self.position,
+            "label": self.label,
             "recipe_id": self.recipe_id,
             "recipe": self.recipe.name if self.recipe else None,
             "servings": self.servings,

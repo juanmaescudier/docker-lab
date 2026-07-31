@@ -20,12 +20,13 @@ lugar de uno legible.
 Todo fallo se traduce a `LLMSchemaError`, que es reintentable: el modelo es no
 determinista y a la segunda suele acertar.
 """
-from domain import COOKING_METHODS, DAYS_OF_WEEK, MEAL_SLOTS
+from domain import COOKING_METHODS, DAYS_OF_WEEK, MIN_POSITION, meals_per_day_for
 from llm.errors import LLMSchemaError
 # El rango de recetas es una decisión de producto y vive en `prompts.py`, que es
 # donde se le pide al modelo. Aquí se importa en vez de repetirlo para que
-# cambiarlo allí surta efecto también en la validación.
-from prompts import MAX_RECIPES, MIN_RECIPES
+# cambiarlo allí surta efecto también en la validación. El mínimo ya no es una
+# constante: sale de la variedad que pidió el usuario (3.22).
+from prompts import MAX_LABEL_LENGTH, recipe_range_for
 
 # Topes de cordura. No son reglas de nutrición: son el filtro que evita escribir
 # en la base de datos un plan absurdo (una receta de 90 kg de arroz) cuando el
@@ -67,13 +68,22 @@ def _number(data, key, where, minimum, maximum):
     return float(value)
 
 
-def validate_plan(data, allowed_food_ids):
+def validate_plan(data, allowed_food_ids, profile=None):
     """Comprueba un plan generado y lo devuelve normalizado.
 
     `allowed_food_ids` son los identificadores que la API le ofreció al modelo,
     no el catálogo entero: si entre que se encoló el trabajo y se procesó alguien
     borró un alimento, escribirlo daría un fallo de clave ajena.
+
+    Del `profile` salen las dos cosas que ya no son constantes mías sino
+    respuestas suyas: **cuántas comidas al día** —y aquí es un requisito, no una
+    sugerencia: la parrilla tiene que traer los siete días con sus posiciones
+    1..N completas— y **cuánta variedad**, que fija el rango de recetas.
     """
+    profile = profile or {}
+    meals_per_day = meals_per_day_for(profile.get("meals_per_day"))
+    min_recipes, max_recipes = recipe_range_for(profile)
+
     if not isinstance(data, dict):
         _fail(f"se esperaba un objeto y ha llegado {type(data).__name__}")
 
@@ -162,8 +172,8 @@ def validate_plan(data, allowed_food_ids):
     meals = []
     occupied = set()
 
-    for position, raw in enumerate(raw_meals, start=1):
-        where = f"comida {position}"
+    for number, raw in enumerate(raw_meals, start=1):
+        where = f"comida {number}"
         if not isinstance(raw, dict):
             _fail(f"{where}: debe ser un objeto")
 
@@ -171,14 +181,25 @@ def validate_plan(data, allowed_food_ids):
         if day not in DAYS_OF_WEEK:
             _fail(f"{where}: 'day_of_week' debe ser uno de: " + ", ".join(DAYS_OF_WEEK))
 
-        slot = raw.get("meal_slot")
-        if slot not in MEAL_SLOTS:
-            _fail(f"{where}: 'meal_slot' debe ser uno de: " + ", ".join(MEAL_SLOTS))
+        # La comida se identifica por su POSICIÓN dentro del día, no por un
+        # nombre de lista cerrada (3.16). El tope es lo que contestó el usuario:
+        # una novena comida en un perfil de ocho no es un plan mejor, es que el
+        # modelo no ha leído el encargo.
+        position = raw.get("position")
+        if isinstance(position, bool) or not isinstance(position, int):
+            _fail(f"{where}: 'position' debe ser un entero")
+        if not MIN_POSITION <= position <= meals_per_day:
+            _fail(
+                f"{where}: 'position' fuera de rango: {position} "
+                f"(el perfil hace {meals_per_day} comidas al día)"
+            )
 
-        if (day, slot) in occupied:
-            # Dos cenas el martes no es un plan, es un descuido del modelo.
-            _fail(f"{where}: ya hay una comida en {day}/{slot}")
-        occupied.add((day, slot))
+        if (day, position) in occupied:
+            # Dos comidas en el mismo hueco del mismo día no es un plan, es un
+            # descuido del modelo. Además lo rechazaría `uq_meal_position_per_day`
+            # con un error de PostgreSQL en vez de uno legible.
+            _fail(f"{where}: ya hay una comida en la posición {position} de {day}")
+        occupied.add((day, position))
 
         ref = raw.get("recipe_ref")
         if ref not in refs:
@@ -186,10 +207,32 @@ def validate_plan(data, allowed_food_ids):
 
         meals.append({
             "day_of_week": day,
-            "meal_slot": slot,
+            "position": position,
+            # Texto descriptivo para la pantalla, no una clave: si el modelo no lo
+            # manda no se rechaza el plan por eso. La interfaz enseña la posición.
+            "label": _text(raw, "meal_label", where, max_length=MAX_LABEL_LENGTH,
+                           required=False, default="") or None,
             "recipe_index": refs[ref],
             "servings": round(_number(raw, "servings", where, 0.1, MAX_SERVINGS), 2),
         })
+
+    # **La parrilla completa se exige, no se pide.** Vivía solo en el texto del
+    # prompt, y un plan al que le faltaran las cenas del fin de semana se
+    # guardaba sin una queja. Es el mismo aprendizaje que el rango de recetas: lo
+    # que no se comprueba, no se cumple.
+    expected = {
+        (day, position)
+        for day in DAYS_OF_WEEK
+        for position in range(MIN_POSITION, meals_per_day + 1)
+    }
+    missing = sorted(expected - occupied)
+    if missing:
+        day, position = missing[0]
+        _fail(
+            f"faltan {len(missing)} comidas de las {len(expected)} que pide el "
+            f"perfil ({meals_per_day} al día durante los siete días); la primera "
+            f"es la posición {position} de {day}"
+        )
 
     # Una receta que no se come en ningún momento de la semana no se escribe: es
     # una fila huérfana que solo ocupa sitio.
@@ -209,15 +252,15 @@ def validate_plan(data, allowed_food_ids):
     # hay esquema que lo imponga, y ahí el mínimo tiene que sostenerse solo. Es
     # justo el caso en el que hoy un modelo podía colar una sola receta para las
     # 28 comidas de la semana y el plan se guardaba sin una queja.
-    if len(recipes) < MIN_RECIPES:
+    if len(recipes) < min_recipes:
         _fail(
             f"el plan solo trae {len(recipes)} recetas distintas y se piden al "
-            f"menos {MIN_RECIPES}: una semana con tan pocos platos no es un plan"
+            f"menos {min_recipes}: una semana con tan pocos platos no es un plan"
         )
-    if len(recipes) > MAX_RECIPES:
+    if len(recipes) > max_recipes:
         _fail(
             f"el plan trae {len(recipes)} recetas distintas y el máximo es "
-            f"{MAX_RECIPES}: nadie cocina tantos platos distintos en una semana"
+            f"{max_recipes}: es más variedad de la que ha pedido"
         )
 
     return {
