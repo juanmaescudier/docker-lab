@@ -404,6 +404,34 @@ Secundarias, para ajustes y no para el arranque: cocina en tandas, para cuánta
 gente cocina, trabajo a turnos, cocinas con las que se maneja, congelador (va
 dentro de "qué tienes en la cocina").
 
+**El texto de cada pregunta y sus opciones están en `cuestionario-inicial.md`.**
+Este documento explica dónde vive cada respuesta y por qué; aquel tiene el
+contenido, que es lo que hace falta para construir el formulario y lo que fija las
+listas cerradas del código.
+
+Dos cosas cambiaron al escribirlo y las traigo aquí porque son de modelado:
+
+**`MEAL_SLOTS` como lista cerrada de cinco no se sostiene.** Probé a preguntar
+*qué* comidas hace en vez de *cuántas*, marcando desayuno, media mañana, comida,
+merienda y cena. Se rompe con un caso real: **yo como ocho veces al día y ahí no
+hay cinco casillas que marcar.** Ampliar la lista a ocho nombres solo mueve el
+problema; el noveno vuelve a no caber.
+
+Lo que sí es estable son **tres anclas —desayuno, comida y cena— y N comidas
+repartidas entre ellas.** O sea que lo que define una comida dentro del día no es
+un nombre de una lista, es **su posición**. `PlannedMeal.meal_slot` tendría que
+pasar a ser un orden dentro del día (1..N), con la etiqueta como texto descriptivo
+para enseñar en pantalla, no como clave.
+
+Es un cambio que toca la validación, el modelo, la parrilla del panel y el prompt,
+así que no lo hago de golpe: queda anotado como pendiente. Pero `meals_per_day`
+vuelve a ser lo que ya era —un entero de 1 a 10— y esa parte no cuesta nada.
+
+**"Alimentos que no quiero ver" se resuelve con un buscador contra el catálogo, no
+con un campo de texto.** La persona escribe para buscar, pero lo que se guarda son
+identificadores de alimento. Así el filtro es una consulta y no hay una entrada
+libre más llegando al prompt.
+
 **Todo de opciones cerradas salvo la última.** Por usabilidad —esto acabará
 siendo táctil— y por lo que explico en 3.19.
 
@@ -448,9 +476,31 @@ Si alguien declara diabetes, enfermedad renal, embarazo, lactancia o un trastorn
 de la conducta alimentaria, **lo correcto no es generar un plan mejor: es no
 generarlo** y decir que eso lo tiene que ver un profesional.
 
-Esta puerta va en el cuestionario desde el principio, no parcheada después. Si la
-persona miente para saltársela, ya no está en mi mano; lo que sí está en mi mano
-es no ponérselo fácil y no fingir que la aplicación sabe.
+**Y va la primera de todo, antes de pedir ningún dato.** Además de la razón legal,
+hay una de protección de datos: si voy a derivar a esa persona a un profesional,
+no tiene sentido haberle pedido antes el peso, los perímetros y las alergias.
+Preguntar y salir recoge el mínimo imprescindible.
+
+**Del cribado no guardo el detalle.** "Este usuario tiene diabetes" es un dato de
+categoría especial que no necesito para nada: guardo solo que pasó el cribado y
+cuándo (`screening_passed_at`). La respuesta concreta no se persiste.
+
+Si la persona miente para saltárselo, ya no está en mi mano; lo que sí está es no
+ponérselo delante.
+
+**La consulta legal (31/07/2026) confirmó que esto se sostiene sobre cuatro
+condiciones**, y dos son de producto puro: presentarlo como planificación de menús
+para **población sana**, en clave de bienestar y educación alimentaria y **no de
+tratamiento**; y **declarar de forma clara y visible que los planes los genera una
+IA** (art. 50 del Reglamento de IA, exigible desde el 2 de agosto de 2026). Las
+otras dos ya estaban cubiertas: los valores nutricionales salen de mi base de
+datos y no del modelo (3.10), e información precontractual y desistimiento
+conformes al TRLGDCU.
+
+De ahí sale una regla que afecta a **toda** la interfaz: **el vocabulario es ahora
+un artefacto legal.** No digo *dieta*, *pauta*, *prescripción* ni *tratamiento*.
+Digo **plan de comidas**, **menú semanal**, **sugerencia**. No es cosmética: es lo
+que sostiene que esto no sea un acto sanitario.
 
 Es también lo que mantiene la aplicación fuera del terreno clínico. En España el
 dietista-nutricionista es profesión sanitaria regulada, y **la frontera entre
@@ -558,6 +608,12 @@ Consecuencia técnica: si el mínimo viene del perfil, **cambia en cada petició
 así que el `minItems` del esquema JSON no puede construirse al importar el módulo
 y pasa a construirse por llamada.
 
+Y un matiz que aparece al repartir el cuestionario: la pregunta de la variedad
+acabó en ajustes, no en el asistente inicial. O sea que **el primer plan de casi
+todo el mundo se generará sin esa respuesta**, y la constante sigue haciendo de
+valor por defecto además de barandilla. No es un problema, pero conviene tenerlo
+claro: el valor que ponga ahí es lo que ve un usuario nuevo.
+
 Aprendido midiendo: **los límites tienen que abrazar el rango natural del modelo,
 no rozarlo.** Con el mínimo en 12, `gpt-4o-mini` cumplió 1 de 4 pasadas —una de
 las fallidas devolvió 11 recetas—, y cada rechazo se paga. Con tres intentos por
@@ -643,8 +699,17 @@ El panel en `/` lo sirve la propia API, en el **mismo origen** que los endpoints
 La sesión va en una cookie `HttpOnly`: desde otro puerto seguiría siendo el mismo
 sitio, pero sería otro origen y cada llamada necesitaría cabeceras CORS con
 `Access-Control-Allow-Credentials`. Para una herramienta interna eso no se paga.
-Es temporal: cuando exista el frontend de verdad, ese fichero sale de aquí y se
-pone detrás de NGINX.
+
+**Y deja de ser temporal.** Nació como un apaño para no depender de `curl`, pero
+es donde voy a probar prompts, comparar modelos y mirar costes, así que se queda y
+crece como **pantalla de trabajo**. Son dos superficies distintas con dos públicos
+distintos: esta es mía y enseña tokens, coste, duración, errores y el `input`
+exacto que se le mandó al modelo; el frontend de producto vendrá aparte y no
+enseñará nada de eso.
+
+Cuando exista el segundo, este se mueve a su propia ruta y deja `/` libre. Lo que
+no cambia es que sigue siendo un fichero estático servido por la API en el mismo
+origen: es lo que lo hace barato de mantener.
 
 Que la API no sepa quién la llama es lo que hace que una aplicación móvil sea
 **otro cliente y no otro servidor**. Lo único que cambiaría es la autenticación:
@@ -683,6 +748,10 @@ una app móvil no usa cookies de sesión igual que un navegador.
   qué comidas modifica, dónde abandona el cuestionario, cuántas veces regenera.
   Mejoran el producto y son las métricas de negocio. El coste por usuario y mes
   ya lo puedo calcular hoy: `llm_cost` está en cada trabajo.
+- **`meal_slot` como posición y no como nombre.** Consecuencia de 3.16: la lista
+  cerrada de cinco momentos no aguanta a quien come ocho veces al día. Toca
+  `validation.py`, el modelo, la parrilla del panel y el prompt, así que va como
+  cambio propio y no colado dentro de otro.
 - **Caducidad de la reserva de un trabajo.** Un trabajo en `processing` no lo
   recupera nadie: `claim_job` solo reclama `pending` y `failed`, y no hay latido.
   Si el worker muere a mitad, ese trabajo queda muerto. Es el *visibility
