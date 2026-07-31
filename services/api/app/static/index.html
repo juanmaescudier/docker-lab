@@ -1,9 +1,11 @@
 <!doctype html>
 <!--
-  Interfaz mínima de nutriapp.
+  Panel de trabajo de nutriapp.
 
-  Es una HERRAMIENTA DE TRABAJO, no el frontend del producto: sirve para dejar de
-  comprobar las cosas con curl. Fea está bien; completa, no.
+  **Dejó de ser un apaño hasta que llegue el frontend.** Es la pantalla desde la
+  que se prueba, se mide y se depura, y va a convivir con el frontend de producto
+  cuando exista. No es lo mismo: aquel enseñará un plan bonito; este enseña lo que
+  se le mandó al modelo, lo que costó y por qué falló.
 
   Tres decisiones que conviene no perder de vista:
 
@@ -13,12 +15,16 @@
      llamada necesitaría CORS con Access-Control-Allow-Credentials, un origen
      explícito en vez de *, y credentials:'include' en cada fetch. Para una
      herramienta interna eso no se paga.
-  2. Un solo fichero, sin framework, sin npm y sin nada traído de un CDN. Cuando
-     exista el frontend de verdad, esto sale de aquí y se pone detrás de NGINX:
-     que sea un fichero suelto hace que mudarlo sea copiarlo y nada más.
+  2. Un solo fichero, sin framework, sin npm y sin nada traído de un CDN. Que sea
+     un fichero suelto es lo que hace que ponerlo detrás de NGINX el día que toque
+     sea copiarlo y nada más.
   3. Aquí NO hay lógica de negocio. La página solo llama a endpoints que ya
      existen y enseña lo que devuelven. Ni un cálculo nutricional: esos números
-     salen del catálogo a través de la API.
+     salen del catálogo a través de la API. Lo único que calcula son los agregados
+     de coste y duración, que son aritmética sobre lo que ya trae `GET /jobs`.
+  4. **Todo lo que viene de la API se escapa antes de pintarlo.** Los nombres de
+     las recetas los escribe un modelo de lenguaje y el texto libre lo escribe el
+     usuario: los dos son texto no confiable por definición.
 -->
 <html lang="es">
 <head>
@@ -111,6 +117,54 @@
   dialog::backdrop { background: #0009; }
   pre { white-space: pre-wrap; font: inherit; color: var(--dim); margin: .4rem 0 0; }
   code { color: var(--dim); font-size: .82rem; }
+
+  /* ---- cuestionario: se contesta a toques, no escribiendo ---- */
+  .q { margin-bottom: 1.1rem; }
+  .q > p.ask { margin: 0 0 .35rem; font-weight: 600; }
+  .q > p.hint { margin: 0 0 .4rem; color: var(--dim); font-size: .82rem; }
+  .opts { display: flex; gap: .35rem; flex-wrap: wrap; }
+  .opts button {
+    background: none; border: 1px solid var(--line); color: var(--dim);
+    font-weight: 400; padding: .3rem .7rem; border-radius: 999px; font-size: .85rem;
+  }
+  .opts button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .opts button.danger.on { border-color: var(--bad); color: var(--bad); }
+  .q input[type=number], .q input[type=date], .q textarea { max-width: 260px; }
+  .q textarea { max-width: 100%; min-height: 5rem; resize: vertical;
+    background: #12141a; border: 1px solid var(--line); color: var(--fg);
+    padding: .4rem .5rem; border-radius: 5px; font: inherit; width: 100%; }
+  .counter { color: var(--dim); font-size: .78rem; }
+  .counter.over { color: var(--bad); }
+  fieldset { border: 0; padding: 0; margin: 0 0 1.4rem; }
+  fieldset > legend {
+    padding: 0; margin-bottom: .8rem; color: var(--accent);
+    font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 600;
+  }
+  .stop {
+    border: 1px solid var(--bad); border-left-width: 4px; border-radius: 8px;
+    padding: 1rem; margin-bottom: 1rem; background: #24191a;
+  }
+  .stop h3 { margin: 0 0 .5rem; color: var(--bad); font-size: 1rem; }
+  .stop p { margin: 0 0 .6rem; }
+  .chips { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .4rem; }
+  .chips button { background: none; border: 1px solid var(--accent); color: var(--accent);
+    border-radius: 999px; padding: .2rem .6rem; font-size: .82rem; font-weight: 400; }
+  .found { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .35rem; }
+  .found button { background: none; border: 1px dashed var(--line); color: var(--dim);
+    border-radius: 999px; padding: .2rem .6rem; font-size: .82rem; font-weight: 400; }
+
+  /* ---- métricas ---- */
+  .tiles { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .8rem; }
+  .tile .k { color: var(--dim); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+  .tile .v { font-size: 1.35rem; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+  .tile .v.bad { color: var(--bad); }
+  dialog.wide { max-width: 1000px; }
+  pre.raw {
+    background: #12141a; border: 1px solid var(--line); border-radius: 6px;
+    padding: .7rem; max-height: 62vh; overflow: auto; font-family: ui-monospace, monospace;
+    font-size: .78rem; white-space: pre; color: var(--fg);
+  }
 </style>
 </head>
 <body>
@@ -123,7 +177,7 @@
 
 <nav id="nav" hidden>
   <button class="tab on" data-view="plan">Plan</button>
-  <button class="tab" data-view="perfil">Perfil</button>
+  <button class="tab" data-view="cuestionario">Cuestionario</button>
   <button class="tab" data-view="compra">Compra</button>
   <button class="tab" data-view="trabajos">Trabajos</button>
 </nav>
@@ -174,14 +228,49 @@
     <div id="boards"></div>
   </section>
 
-  <!-- --------------------------------------------------------- perfil -->
-  <section class="view" id="view-perfil">
+  <!-- --------------------------------------------------- cuestionario -->
+  <section class="view" id="view-cuestionario">
+
+    <!-- Perfiles de prueba. Viven en el navegador (localStorage) y no en la API:
+         son MIS perfiles de laboratorio, no datos de la aplicación, y guardarlos
+         en el servidor sería inventarse un endpoint para una libreta. -->
     <div class="card">
-      <h2>Mi perfil</h2>
-      <div class="grid" id="profile-fields"></div>
-      <div class="row" style="margin-top:1rem">
-        <button id="save-profile">Guardar</button>
-        <span id="profile-derived" class="muted"></span>
+      <h2>Perfiles de prueba</h2>
+      <p class="muted" style="margin:0 0 .6rem">
+        Guarda las respuestas de ahora con un nombre y recupéralas de un toque.
+        Se quedan en este navegador; recuperar uno solo rellena el formulario, hay
+        que darle a guardar para mandarlo.
+      </p>
+      <div class="row">
+        <div style="max-width:220px">
+          <label for="preset-name">Nombre</label>
+          <input id="preset-name" type="text" placeholder="ocho comidas, vegano...">
+        </div>
+        <button class="ghost" id="preset-save">Guardar el de ahora</button>
+      </div>
+      <div class="chips" id="presets"></div>
+    </div>
+
+    <!-- El cribado va PRIMERO y corta de verdad (3.18). Si voy a derivar a esta
+         persona a un profesional, no tiene sentido haberle pedido antes el peso,
+         los perímetros y las alergias. -->
+    <div class="card">
+      <h2>Antes de empezar</h2>
+      <p style="margin:0 0 .8rem">
+        Esta herramienta organiza menús para personas sanas. No sustituye a un
+        profesional sanitario y no está pensada para tratar ninguna enfermedad.
+      </p>
+      <div id="screening"></div>
+      <div id="screening-stop"></div>
+    </div>
+
+    <div id="questionnaire" hidden>
+      <div class="card">
+        <div id="questions"></div>
+        <div class="row" style="margin-top:.5rem">
+          <button id="save-profile">Guardar respuestas</button>
+          <span id="profile-derived" class="muted"></span>
+        </div>
       </div>
     </div>
   </section>
@@ -207,11 +296,28 @@
   <!-- ------------------------------------------------------- trabajos -->
   <section class="view" id="view-trabajos">
     <div class="card">
+      <h2>Lo que llevo gastado</h2>
+      <p class="muted" style="margin:0 0 .8rem">
+        Sale de sumar el <code>result</code> de todos los trabajos. Sirve para
+        saber si un cambio en el prompt sale caro <em>antes</em> de que lo diga la
+        factura.
+      </p>
+      <div class="tiles" id="totals"></div>
+      <h3 style="font-size:.8rem;color:var(--dim);margin:1.2rem 0 .4rem">Por modelo</h3>
+      <div class="scroll"><table id="by-model"></table></div>
+    </div>
+
+    <div class="card">
       <h2>Trabajos</h2>
       <div class="row" style="margin-bottom:.8rem">
         <button class="ghost" id="reload-jobs">Recargar</button>
         <span class="muted" id="jobs-count"></span>
       </div>
+      <p class="muted" style="margin:0 0 .8rem">
+        <strong>input</strong> abre el perfil y el catálogo exactos con los que se
+        generó ese plan. Es lo que dice si un plan malo lo hizo mal el modelo o si
+        le mandé mal los datos.
+      </p>
       <div class="scroll"><table id="jobs-table"></table></div>
     </div>
   </section>
@@ -222,24 +328,24 @@
   <div style="margin-top:1rem"><button class="ghost" id="close-recipe">Cerrar</button></div>
 </dialog>
 
+<dialog id="raw-dialog" class="wide">
+  <div id="raw-body"></div>
+  <div style="margin-top:1rem"><button class="ghost" id="close-raw">Cerrar</button></div>
+</dialog>
+
 <script>
 "use strict";
 
-// Las listas cerradas están copiadas de app/users/models.py y app/plans/models.py.
-// Es duplicación consciente: hoy ningún endpoint las publica, y el encargo dice
-// que no invente uno. Queda anotado en el informe.
-const SEXES = { male: "hombre", female: "mujer", other: "otro" };
-const ACTIVITY_LEVELS = { sedentary: "sedentario", light: "ligero", moderate: "moderado", high: "alto" };
-const GOALS = { lose_fat: "perder grasa", maintain: "mantener", gain_muscle: "ganar músculo" };
-const FOOD_PREFERENCES = { omnivore: "omnívoro", vegetarian: "vegetariano", vegan: "vegano" };
-const BODY_COMPOSITIONS = { lean: "delgado", average: "normal", athletic: "atlético", overweight: "sobrepeso" };
-
+// Las listas cerradas están copiadas de app/users/models.py, app/catalog/models.py
+// y app/recipes/models.py. Es duplicación consciente: hoy ningún endpoint las
+// publica y el encargo dice que no invente uno. Si un valor se queda viejo, la API
+// lo rechaza con un 400 que dice cuáles son los buenos, así que falla ruidosamente.
 const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 const DAY_LABEL = { monday:"lunes", tuesday:"martes", wednesday:"miércoles",
                     thursday:"jueves", friday:"viernes", saturday:"sábado", sunday:"domingo" };
-const SLOTS = ["breakfast","mid_morning","lunch","afternoon_snack","dinner"];
-const SLOT_LABEL = { breakfast:"desayuno", mid_morning:"media mañana", lunch:"comida",
-                     afternoon_snack:"merienda", dinner:"cena" };
+// Ya no hay lista cerrada de momentos del día: una comida se identifica por su
+// POSICIÓN dentro del día (1..N) y la etiqueta es texto libre que escribe quien
+// compone el plan. Las columnas de la parrilla salen del propio plan.
 
 const NUTRIENTS = [
   ["energy_kcal","kcal"], ["protein_g","proteínas (g)"], ["carbs_g","hidratos (g)"],
@@ -247,24 +353,165 @@ const NUTRIENTS = [
   ["fiber_g","fibra (g)"], ["salt_g","sal (g)"],
 ];
 
-const PROFILE_FIELDS = [
-  { name: "name", label: "Nombre", type: "text" },
-  { name: "sex", label: "Sexo", options: SEXES },
-  { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
-  { name: "height_cm", label: "Altura (cm)", type: "number" },
-  { name: "weight_kg", label: "Peso (kg)", type: "number", step: "0.1" },
-  { name: "activity_level", label: "Nivel de actividad", options: ACTIVITY_LEVELS },
-  { name: "goal", label: "Objetivo", options: GOALS },
-  { name: "meals_per_day", label: "Comidas al día", type: "number" },
-  { name: "food_preference", label: "Preferencia alimentaria", options: FOOD_PREFERENCES },
-  { name: "body_composition", label: "Composición corporal", options: BODY_COMPOSITIONS },
-  { name: "waist_cm", label: "Cintura (cm)", type: "number", step: "0.1" },
-  { name: "hip_cm", label: "Cadera (cm)", type: "number", step: "0.1" },
-  { name: "neck_cm", label: "Cuello (cm)", type: "number", step: "0.1" },
+// ---------------------------------------------------------------- cuestionario
+//
+// El contenido está en docs/cuestionario-inicial.md y aquí solo se pinta. Cada
+// pregunta declara DÓNDE vive su respuesta (`where`), que es la clasificación de
+// 3.16 puesta en la pantalla:
+//
+//   profile     → columna de `users`         preferences → la columna JSON
+//   allergens / intolerances / excluded      → las tres relaciones propias
+//
+// `kind` dice cómo se contesta. Todo es de opciones cerradas menos una, que va
+// marcada como `text` y es la única de todo el cuestionario (3.19).
+
+// Bloque 0. Va aparte del resto porque no se guarda: de él solo sale la fecha de
+// `screening_passed_at`, nunca qué condición marcó (3.18).
+const SCREENING = [
+  ["diabetes", "Diabetes (tipo 1 o tipo 2)"],
+  ["kidney_liver", "Enfermedad renal o hepática"],
+  ["pregnancy_lactation", "Embarazo o lactancia"],
+  ["eating_disorder", "Un trastorno de la conducta alimentaria, diagnosticado o en tratamiento"],
+  ["cardiovascular", "Enfermedad cardiovascular con alimentación pautada por un médico"],
+  ["professional_diet", "Sigo una pauta de alimentación indicada por un profesional sanitario"],
 ];
+
+const BLOCKS = [
+  { title: "1 · Quién eres", questions: [
+    { name: "sex", where: "profile", kind: "choice", ask: "Sexo",
+      options: [["male","Hombre"],["female","Mujer"],["other","Otro"]] },
+    { name: "birth_date", where: "profile", kind: "date", ask: "Fecha de nacimiento",
+      hint: "Se guarda la fecha; la edad se calcula sola." },
+    { name: "height_cm", where: "profile", kind: "number", ask: "Altura (cm)" },
+    { name: "weight_kg", where: "profile", kind: "number", step: "0.1", ask: "Peso (kg)" },
+    { name: "activity_level", where: "profile", kind: "choice", ask: "¿Cómo es tu día a día?",
+      hint: "Preguntado por conducta y no por etiqueta: «moderado» significa cosas distintas para cada persona.",
+      options: [["sedentary","Paso el día sentado y no hago ejercicio"],
+                ["light","Camino algo o entreno una o dos veces por semana"],
+                ["moderate","Entreno tres o cuatro veces por semana"],
+                ["high","Entreno casi a diario o mi trabajo es físico"]] },
+  ]},
+  { title: "2 · Qué quieres conseguir", questions: [
+    { name: "goal", where: "profile", kind: "choice", ask: "Objetivo",
+      options: [["lose_fat","Perder grasa"],["maintain","Mantenerme"],["gain_muscle","Ganar músculo"]] },
+    { name: "goal_pace", where: "profile", kind: "choice", ask: "¿A qué ritmo?",
+      options: [["gentle","Sin prisa, que apenas se note en el día a día"],
+                ["moderate","Un ritmo sostenible"],
+                ["fast","Quiero ver cambios pronto, aunque cueste más seguirlo"]] },
+  ]},
+  { title: "3 · Lo que no puedes comer", questions: [
+    { name: "allergens", where: "allergens", kind: "multi",
+      ask: "Alergias",
+      hint: "Los 14 de declaración obligatoria. Lo que marques aquí SALE DEL CATÁLOGO antes de que el modelo lo vea: no se le pide que tenga cuidado.",
+      options: [["gluten","Cereales con gluten"],["crustaceans","Crustáceos"],
+                ["eggs","Huevos"],["fish","Pescado"],["peanuts","Cacahuetes"],
+                ["soy","Soja"],["milk","Leche"],["nuts","Frutos de cáscara"],
+                ["celery","Apio"],["mustard","Mostaza"],["sesame","Sésamo"],
+                ["sulphites","Sulfitos"],["lupin","Altramuces"],["molluscs","Moluscos"]] },
+    { name: "intolerances", where: "intolerances", kind: "intolerances",
+      ask: "Intolerancias",
+      hint: "Lista aparte porque tienen dosis y no exclusión: no quitan alimentos, viajan al modelo con su nivel.",
+      options: [["lactose","Lactosa"],["gluten_non_celiac","Gluten (sin celiaquía)"],
+                ["fructose","Fructosa"],["sorbitol","Sorbitol"],["histamine","Histamina"]],
+      levels: [["none","Nada, ni cantidades pequeñas"],["small","Cantidades pequeñas sí"],
+               ["moderate","Bastante, solo me sienta mal en exceso"]] },
+    { name: "excluded_food_ids", where: "excluded", kind: "foods",
+      ask: "Alimentos que no quieres ver",
+      hint: "Buscador contra el catálogo, no un campo de texto: se guarda el identificador del alimento, nunca lo que teclees." },
+    { name: "food_preference", where: "profile", kind: "choice", ask: "Preferencia alimentaria",
+      options: [["omnivore","Como de todo"],["vegetarian","Vegetariana"],["vegan","Vegana"]] },
+  ]},
+  { title: "4 · Cómo comes", questions: [
+    { name: "meals_per_day", where: "profile", kind: "number", ask: "¿Cuántas veces comes al día?",
+      hint: "De 1 a 10. Un número y no una lista de momentos con nombre: hay quien come ocho veces al día y ahí no hay cinco casillas que marcar." },
+    { name: "dessert", where: "preferences", kind: "choice", ask: "¿Postre?",
+      options: [["none","No"],["lunch","Después de comer"],["dinner","Después de cenar"],["both","En las dos"]] },
+    { name: "weekend", where: "preferences", kind: "choice", ask: "¿El fin de semana comes distinto?",
+      hint: "Importa más de lo que parece: un plan que finge que el sábado es igual que el martes se rompe el sábado.",
+      options: [["same","Igual que entre semana"],["looser","Algo más relajado"],
+                ["very_different","Bastante distinto"]] },
+  ]},
+  { title: "5 · Cómo cocinas", questions: [
+    { name: "cooking_methods", where: "preferences", kind: "multi",
+      ask: "¿Qué tienes en la cocina?",
+      hint: "Esto filtra de verdad: lo que no marques deja de ser un valor posible en el esquema que se le manda al modelo.",
+      options: [["raw","Crudo"],["boiled","Cocido"],["steamed","Al vapor"],
+                ["microwaved","Microondas"],["griddled","A la plancha"],["sauteed","Salteado"],
+                ["baked","Al horno"],["air_fried","Freidora de aire"],["fried","Frito"],
+                ["stewed","Guisado"]] },
+    { name: "freezer", where: "preferences", kind: "bool", ask: "¿Tienes congelador?" },
+    { name: "cooking_time", where: "preferences", kind: "choice",
+      ask: "¿Cuánto tiempo tienes para cocinar entre semana?",
+      options: [["quick","Quince minutos como mucho"],["normal","Media hora"],
+                ["relaxed","Una hora o más, me gusta cocinar"]] },
+  ]},
+  { title: "6 · La compra", questions: [
+    { name: "shopping_frequency", where: "preferences", kind: "choice", ask: "¿Cada cuánto compras?",
+      options: [["daily","Casi a diario"],["twice_week","Dos o tres veces por semana"],
+                ["weekly","Una vez por semana"],["biweekly","Cada dos semanas"]] },
+    { name: "budget", where: "preferences", kind: "choice", ask: "¿Con qué presupuesto?",
+      hint: "Bandas y no euros: una cifra depende de cuánta gente coma en casa y de dónde vivas.",
+      options: [["tight","Ajustado, busco lo económico"],["normal","Sin agobios, pero sin excesos"],
+                ["generous","El precio no es lo que me preocupa"]] },
+  ]},
+  { title: "7 · Gustos", questions: [
+    { name: "spicy", where: "preferences", kind: "choice", ask: "¿Picante?",
+      options: [["none","Nada"],["mild","Un poco"],["love_it","Cuanto más mejor"]] },
+    { name: "variety", where: "preferences", kind: "choice", ask: "¿Cuánta variedad quieres?",
+      hint: "Sustituye a la constante MIN_RECIPES: es lo que fija cuántas recetas distintas se le exigen al modelo.",
+      options: [["low","Prefiero repetir platos, me simplifica la vida"],
+                ["balanced","Un equilibrio"],["high","Cuanta más variedad, mejor"]] },
+    { name: "breakfast_variety", where: "preferences", kind: "choice", ask: "¿Y en el desayuno?",
+      hint: "Separada a propósito: mucha gente quiere el mismo desayuno siempre y cenas distintas.",
+      options: [["same_every_day","Me vale el mismo todos los días"],["varied","Prefiero variar"]] },
+    { name: "daily_drinks", where: "preferences", kind: "multi", ask: "¿Tomas alguna de estas a diario?",
+      options: [["coffee","Café"],["milk","Leche o bebida vegetal"],
+                ["soft_drinks","Refrescos"],["alcohol","Alcohol"]] },
+    { name: "weighs_food", where: "preferences", kind: "choice", ask: "¿Pesas la comida?",
+      hint: "Si la calculas a ojo, «127 g de pollo» es teatro: el plan sale en cantidades redondas y medidas caseras.",
+      options: [["weighs","Sí, uso báscula"],["estimates","No, calculo a ojo"]] },
+  ]},
+  { title: "8 · Entrenamiento", questions: [
+    { name: "training_type", where: "profile", kind: "choice", ask: "¿Entrenas?",
+      options: [["no","No"],["strength","Fuerza"],["cardio","Cardio"],
+                ["mixed","Mixto"],["sport","Practico un deporte"]] },
+    { name: "training_days_per_week", where: "profile", kind: "number",
+      ask: "¿Cuántos días por semana?", hint: "De 1 a 7. Solo si entrenas." },
+    { name: "training_days", where: "preferences", kind: "multi", ask: "¿Qué días?",
+      options: DAYS.map((d) => [d, DAY_LABEL[d]]) },
+    { name: "training_time", where: "preferences", kind: "choice", ask: "¿A qué hora entrenas?",
+      options: [["morning","Por la mañana"],["midday","A mediodía"],
+                ["evening","Por la tarde"],["night","Por la noche"]] },
+    { name: "different_on_training_days", where: "preferences", kind: "bool",
+      ask: "¿Quieres comer distinto los días de entrenamiento?" },
+  ]},
+  { title: "9 · La única pregunta abierta", questions: [
+    { name: "previous_attempts", where: "preferences", kind: "text", maxLength: 1000,
+      ask: "¿Has intentado antes cambiar tu alimentación? ¿Qué te hizo dejarlo?",
+      hint: "Cuéntalo con tus palabras. Es la única entrada libre de todo el cuestionario, y va tratada como hostil: limitada aquí, delimitada en el prompt como dato del usuario y escapada al pintarla." },
+  ]},
+  { title: "Perímetros (opcionales)", questions: [
+    { name: "waist_cm", where: "profile", kind: "number", step: "0.1", ask: "Cintura (cm)" },
+    { name: "hip_cm", where: "profile", kind: "number", step: "0.1", ask: "Cadera (cm)" },
+    { name: "neck_cm", where: "profile", kind: "number", step: "0.1", ask: "Cuello (cm)" },
+    { name: "body_composition", where: "profile", kind: "choice", ask: "¿Cómo te ves?",
+      hint: "El IMC no distingue músculo de grasa; esto aporta el contexto que por sí solo no da.",
+      options: [["lean","Delgado"],["average","Normal"],["athletic","Atlético"],
+                ["overweight","Con sobrepeso"]] },
+  ]},
+];
+
+const PRESETS_KEY = "nutriapp.perfiles-de-prueba";
 
 let me = null;
 let pollTimer = null;
+
+// Las respuestas de la pantalla, antes de mandarlas. Se mantienen aparte de `me`
+// porque el formulario se rellena y se vacía muchas veces por sesión y no todo lo
+// que hay en pantalla está guardado todavía.
+let answers = {};
+let screening = new Set();
+let excludedFoods = [];   // [{id, name}] para poder pintar el nombre sin pedirlo
 
 // Estado de la comparación de planes.
 //   plans       → lo que devuelve GET /plans (el activo primero).
@@ -338,6 +585,7 @@ document.querySelectorAll("nav .tab").forEach((button) => {
     const view = button.dataset.view;
     show(view);
     if (view === "trabajos") loadJobs();
+    if (view === "cuestionario") renderQuestionnaire();
     if (view === "plan" || view === "compra") loadPlans();
   });
 });
@@ -357,9 +605,23 @@ function showApp(user) {
   $("nav").hidden = false;
   $("logout").hidden = false;
   text($("who"), user.email);
-  renderProfile();
+  answers = answersFromUser(user);
+  screening = user.screening_passed_at ? new Set(["none"]) : new Set();
+  // Los nombres de los alimentos vetados no vienen en el usuario, solo sus
+  // identificadores: se piden una vez para poder pintar la chapa con su nombre.
+  loadExcludedFoodNames();
+  renderQuestionnaire();
   show("plan");
   loadPlans();
+}
+
+async function loadExcludedFoodNames() {
+  const ids = me.excluded_food_ids || [];
+  const responses = await Promise.all(ids.map((id) => api(`/foods/${id}`)));
+  excludedFoods = responses
+    .filter((r) => r.status === 200)
+    .map((r) => ({ id: r.data.id, name: r.data.name }));
+  renderQuestionnaire();
 }
 
 // --------------------------------------------------------------------- sesión
@@ -383,37 +645,38 @@ $("logout").addEventListener("click", async () => {
   flash("sesión cerrada");
 });
 
-// --------------------------------------------------------------------- perfil
+// --------------------------------------------------------------- cuestionario
 
-function renderProfile() {
-  const container = $("profile-fields");
+/** Vuelca lo que hay guardado en el servidor al formulario. */
+function answersFromUser(user) {
+  const values = { ...(user.preferences || {}) };
+  for (const block of BLOCKS) {
+    for (const question of block.questions) {
+      if (question.where === "profile") values[question.name] = user[question.name];
+    }
+  }
+  values.allergens = user.allergens || [];
+  values.intolerances = user.intolerances || [];
+  values.excluded_food_ids = user.excluded_food_ids || [];
+  return values;
+}
+
+function renderQuestionnaire() {
+  renderScreening();
+  renderPresets();
+
+  const container = $("questions");
   container.innerHTML = "";
 
-  for (const field of PROFILE_FIELDS) {
-    const wrapper = document.createElement("div");
-    const label = document.createElement("label");
-    label.textContent = field.label;
-    label.htmlFor = "f-" + field.name;
-    wrapper.appendChild(label);
-
-    let input;
-    if (field.options) {
-      // Lista cerrada: desplegable, no texto libre. La API rechaza cualquier
-      // otro valor con un 400, así que un input de texto solo daría errores.
-      input = document.createElement("select");
-      input.appendChild(new Option("— sin indicar —", ""));
-      for (const [value, labelText] of Object.entries(field.options)) {
-        input.appendChild(new Option(labelText, value));
-      }
-    } else {
-      input = document.createElement("input");
-      input.type = field.type;
-      if (field.step) input.step = field.step;
+  for (const block of BLOCKS) {
+    const fieldset = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = block.title;
+    fieldset.appendChild(legend);
+    for (const question of block.questions) {
+      fieldset.appendChild(renderQuestion(question));
     }
-    input.id = "f-" + field.name;
-    input.value = me[field.name] === null || me[field.name] === undefined ? "" : me[field.name];
-    wrapper.appendChild(input);
-    container.appendChild(wrapper);
+    container.appendChild(fieldset);
   }
 
   // Edad e IMC son derivados: se enseñan, no se editan (3.5).
@@ -421,13 +684,279 @@ function renderProfile() {
     `edad: ${me.age ?? "—"} · IMC: ${me.bmi ?? "—"} (calculados, no se guardan)`);
 }
 
-$("save-profile").addEventListener("click", async () => {
-  const body = {};
-  for (const field of PROFILE_FIELDS) {
-    const raw = $("f-" + field.name).value;
-    if (raw === "") { body[field.name] = null; continue; }
-    body[field.name] = field.type === "number" ? Number(raw) : raw;
+function renderQuestion(question) {
+  const box = document.createElement("div");
+  box.className = "q";
+
+  const ask = document.createElement("p");
+  ask.className = "ask";
+  ask.textContent = question.ask;
+  box.appendChild(ask);
+
+  if (question.hint) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = question.hint;
+    box.appendChild(hint);
   }
+
+  box.appendChild(renderControl(question));
+  return box;
+}
+
+function renderControl(question) {
+  const value = answers[question.name];
+
+  // Botones para todo lo cerrado: se contesta a toques, que es lo que hace que
+  // se pueda rellenar entero muchas veces seguidas sin desesperarse.
+  if (question.kind === "choice" || question.kind === "bool") {
+    const options = question.kind === "bool"
+      ? [[true, "Sí"], [false, "No"]] : question.options;
+    return optionRow(options, (option) => option === value, (option) => {
+      answers[question.name] = option === value ? null : option;  // repulsar = borrar
+      renderQuestionnaire();
+    });
+  }
+
+  if (question.kind === "multi") {
+    const chosen = Array.isArray(value) ? value : [];
+    return optionRow(question.options, (option) => chosen.includes(option), (option) => {
+      answers[question.name] = chosen.includes(option)
+        ? chosen.filter((v) => v !== option) : [...chosen, option];
+      renderQuestionnaire();
+    });
+  }
+
+  if (question.kind === "intolerances") return renderIntolerances(question);
+  if (question.kind === "foods") return renderFoodPicker(question);
+
+  if (question.kind === "text") {
+    // LA ÚNICA entrada libre. El contador no es adorno: la API rechaza con un 400
+    // lo que pase del límite, y enterarse al guardar es peor que verlo al escribir.
+    const wrapper = document.createElement("div");
+    const area = document.createElement("textarea");
+    area.maxLength = question.maxLength;
+    area.value = value || "";
+    const counter = document.createElement("div");
+    counter.className = "counter";
+    const paint = () => {
+      counter.textContent = `${area.value.length} / ${question.maxLength} caracteres`;
+      counter.classList.toggle("over", area.value.length >= question.maxLength);
+    };
+    area.addEventListener("input", () => { answers[question.name] = area.value; paint(); });
+    paint();
+    wrapper.appendChild(area);
+    wrapper.appendChild(counter);
+    return wrapper;
+  }
+
+  const input = document.createElement("input");
+  input.type = question.kind;                     // number | date
+  if (question.step) input.step = question.step;
+  input.value = value === null || value === undefined ? "" : value;
+  input.addEventListener("input", () => {
+    answers[question.name] = input.value === ""
+      ? null : (question.kind === "number" ? Number(input.value) : input.value);
+  });
+  return input;
+}
+
+/** Fila de botones de opción. `isOn` decide cuál está marcado; `pick` qué pasa al pulsar. */
+function optionRow(options, isOn, pick, danger = false) {
+  const row = document.createElement("div");
+  row.className = "opts";
+  for (const [option, label] of options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    if (danger) button.classList.add("danger");
+    if (isOn(option)) button.classList.add("on");
+    button.addEventListener("click", () => pick(option));
+    row.appendChild(button);
+  }
+  return row;
+}
+
+/**
+ * Una fila por intolerancia: no la tengo, o el nivel que tolera.
+ *
+ * El nivel es lo que la separa de una alergia (3.17): la alergia quita el
+ * alimento del catálogo y no admite matices; esta es una cantidad.
+ */
+function renderIntolerances(question) {
+  const rows = Array.isArray(answers.intolerances) ? answers.intolerances : [];
+  const box = document.createElement("div");
+
+  for (const [value, label] of question.options) {
+    const current = rows.find((r) => r.intolerance === value);
+    const line = document.createElement("div");
+    line.style.margin = "0 0 .4rem";
+
+    const name = document.createElement("div");
+    name.className = "hint";
+    name.style.margin = "0 0 .2rem";
+    name.textContent = label;
+    line.appendChild(name);
+
+    const options = [["", "No la tengo"], ...question.levels];
+    line.appendChild(optionRow(
+      options,
+      (level) => (current ? current.tolerance === level : level === ""),
+      (level) => {
+        const rest = rows.filter((r) => r.intolerance !== value);
+        answers.intolerances = level === ""
+          ? rest : [...rest, { intolerance: value, tolerance: level }];
+        renderQuestionnaire();
+      },
+    ));
+    box.appendChild(line);
+  }
+  return box;
+}
+
+/**
+ * Buscador contra el catálogo. **Lo que se guarda es el identificador**, nunca lo
+ * que se teclea (3.16): así el filtro es una consulta y no hay una entrada libre
+ * más llegando al prompt.
+ */
+function renderFoodPicker(question) {
+  const box = document.createElement("div");
+
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = "escribe para buscar en el catálogo…";
+  search.style.maxWidth = "320px";
+  box.appendChild(search);
+
+  const found = document.createElement("div");
+  found.className = "found";
+  box.appendChild(found);
+
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  for (const food of excludedFoods) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.textContent = food.name + " ✕";
+    chip.addEventListener("click", () => {
+      excludedFoods = excludedFoods.filter((f) => f.id !== food.id);
+      answers.excluded_food_ids = excludedFoods.map((f) => f.id);
+      renderQuestionnaire();
+    });
+    chips.appendChild(chip);
+  }
+  box.appendChild(chips);
+
+  let timer = null;
+  search.addEventListener("input", () => {
+    clearTimeout(timer);
+    // Medio segundo de espera: sin esto, escribir "pollo" son cinco peticiones.
+    timer = setTimeout(async () => {
+      const term = search.value.trim();
+      found.innerHTML = "";
+      if (term.length < 2) return;
+      const { status, data } = await api(`/foods?search=${encodeURIComponent(term)}&per_page=8`);
+      if (status !== 200) return;
+      for (const food of data.foods) {
+        if (excludedFoods.some((f) => f.id === food.id)) continue;
+        const hit = document.createElement("button");
+        hit.type = "button";
+        hit.textContent = food.name;
+        hit.addEventListener("click", () => {
+          excludedFoods = [...excludedFoods, { id: food.id, name: food.name }];
+          answers.excluded_food_ids = excludedFoods.map((f) => f.id);
+          renderQuestionnaire();
+        });
+        found.appendChild(hit);
+      }
+    }, 500);
+  });
+
+  return box;
+}
+
+// ------------------------------------------------------------------- cribado
+
+/**
+ * El cribado, que va primero y **corta de verdad** (3.18).
+ *
+ * Sin botón de "continuar igualmente". Si alguien quiere mentir volverá atrás y
+ * cambiará la respuesta; eso ya no está en mi mano. Lo que sí está es no
+ * ponérselo delante.
+ *
+ * Y el corte no vive solo aquí: `POST /plans/generate` responde 409 a quien no
+ * haya pasado el cribado, porque una comprobación que solo está en el formulario
+ * la salta cualquiera que llame al endpoint.
+ */
+function renderScreening() {
+  const options = [...SCREENING, ["none", "Ninguna de las anteriores"]];
+  const container = $("screening");
+  container.innerHTML = "";
+  container.appendChild(optionRow(
+    options,
+    (value) => screening.has(value),
+    (value) => {
+      if (value === "none") {
+        // "Ninguna" es excluyente con todo lo demás, en los dos sentidos.
+        screening = screening.has("none") ? new Set() : new Set(["none"]);
+      } else {
+        screening.delete("none");
+        if (screening.has(value)) screening.delete(value); else screening.add(value);
+      }
+      renderQuestionnaire();
+      applyScreening();
+    },
+    true,
+  ));
+  applyScreening();
+}
+
+function applyScreening() {
+  const blocked = [...screening].some((value) => value !== "none");
+  const passed = screening.has("none") || me.screening_passed_at !== null;
+
+  $("screening-stop").innerHTML = blocked
+    ? `<div class="stop">
+         <h3>Aquí no seguimos</h3>
+         <p>Con lo que me has contado, tu alimentación debería planificarla un
+            dietista-nutricionista o tu médico, que pueden tener en cuenta cosas
+            que esta herramienta no ve.</p>
+         <p>No voy a generarte un plan, y prefiero decírtelo ahora que darte algo
+            que no te conviene.</p>
+       </div>`
+    : "";
+
+  // El resto del cuestionario no aparece hasta que el cribado está limpio: si voy
+  // a derivar a esta persona, no tiene sentido haberle pedido antes el peso, los
+  // perímetros y las alergias. Preguntar y salir recoge el mínimo imprescindible.
+  $("questionnaire").hidden = blocked || !passed;
+}
+
+// ------------------------------------------------- guardar y perfiles de prueba
+
+$("save-profile").addEventListener("click", async () => {
+  const body = { preferences: {} };
+
+  for (const block of BLOCKS) {
+    for (const question of block.questions) {
+      const value = answers[question.name];
+      if (question.where === "profile") {
+        body[question.name] = value === undefined ? null : value;
+      } else if (question.where === "preferences") {
+        // `null` borra la respuesta; el objeto se mezcla con lo que ya hubiera.
+        body.preferences[question.name] = value === undefined ? null : value;
+      }
+    }
+  }
+
+  body.allergens = answers.allergens || [];
+  body.intolerances = answers.intolerances || [];
+  body.excluded_food_ids = answers.excluded_food_ids || [];
+
+  // Del cribado sale un sí y nada más: qué marcó no se manda, y la API tampoco
+  // tiene dónde recogerlo (3.18).
+  if (screening.has("none")) body.screening_passed = true;
+  body.onboarded = true;
 
   const { status, data } = await api(`/users/${me.id}`, {
     method: "PATCH",
@@ -436,8 +965,72 @@ $("save-profile").addEventListener("click", async () => {
   if (status !== 200) return flash(apiError(data, "no se ha podido guardar"), "err");
 
   me = data;
-  renderProfile();
-  flash("perfil guardado", "ok");
+  answers = answersFromUser(me);
+  renderQuestionnaire();
+  flash("respuestas guardadas", "ok");
+});
+
+/**
+ * Perfiles de prueba, en el navegador y no en la API.
+ *
+ * Son perfiles de LABORATORIO, no datos de la aplicación: sirven para volver a
+ * dejar el formulario como estaba y generar otro plan con las mismas respuestas.
+ * Guardarlos en el servidor sería inventarse un endpoint para una libreta.
+ */
+function readPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESETS_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+
+function renderPresets() {
+  const presets = readPresets();
+  const container = $("presets");
+  container.innerHTML = "";
+
+  const names = Object.keys(presets).sort();
+  if (!names.length) {
+    container.innerHTML = '<span class="muted">todavía no has guardado ninguno</span>';
+    return;
+  }
+
+  for (const name of names) {
+    const load = document.createElement("button");
+    load.type = "button";
+    load.textContent = name;
+    load.addEventListener("click", () => {
+      const preset = presets[name];
+      answers = { ...preset.answers };
+      screening = new Set(preset.screening || []);
+      excludedFoods = preset.excludedFoods || [];
+      renderQuestionnaire();
+      flash(`«${name}» cargado en el formulario; dale a guardar para mandarlo`);
+    });
+    container.appendChild(load);
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.textContent = "✕";
+    drop.style.borderColor = "var(--line)";
+    drop.style.color = "var(--dim)";
+    drop.addEventListener("click", () => {
+      const rest = readPresets();
+      delete rest[name];
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(rest));
+      renderPresets();
+    });
+    container.appendChild(drop);
+  }
+}
+
+$("preset-save").addEventListener("click", () => {
+  const name = $("preset-name").value.trim();
+  if (!name) return flash("ponle un nombre al perfil de prueba", "err");
+  const presets = readPresets();
+  presets[name] = { answers, screening: [...screening], excludedFoods };
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  $("preset-name").value = "";
+  renderPresets();
+  flash(`perfil de prueba «${name}» guardado`, "ok");
 });
 
 // ----------------------------------------------------------- generar un plan
@@ -717,21 +1310,42 @@ function renderBoards() {
   for (const id of shown) fillGrid(container.querySelector(`table[data-plan="${id}"]`), planDetail[id]);
 }
 
+/**
+ * Cabecera de una columna: la etiqueta más repetida en esa posición.
+ *
+ * La etiqueta la escribe el modelo comida a comida, así que puede llamar
+ * "Merienda" a la posición 4 el lunes y "Media tarde" el jueves. Para la
+ * cabecera hace falta UNA, y la que más veces aparece es la que mejor describe
+ * esa columna. Si no hay ninguna, se enseña el número, que nunca falta.
+ */
+function columnLabel(meals, position) {
+  const counts = {};
+  for (const meal of meals) {
+    if (meal.position !== position || !meal.label) continue;
+    counts[meal.label] = (counts[meal.label] || 0) + 1;
+  }
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best ? `${position} · ${best[0]}` : String(position);
+}
+
 function fillGrid(table, plan) {
-  // Solo los momentos del día que el plan usa de verdad: enseñar cinco columnas
-  // cuando el usuario hace tres comidas llena la parrilla de huecos.
-  const usedSlots = SLOTS.filter((slot) => plan.meals.some((m) => m.meal_slot === slot));
+  // Las columnas salen del plan, no de una lista fija: tantas como posiciones
+  // use de verdad. Es lo que hace que un perfil de ocho comidas al día se vea
+  // igual de bien que uno de tres.
+  const positions = [...new Set(plan.meals.map((m) => m.position))].sort((a, b) => a - b);
   const byCell = {};
-  for (const meal of plan.meals) byCell[meal.day_of_week + "|" + meal.meal_slot] = meal;
+  for (const meal of plan.meals) byCell[meal.day_of_week + "|" + meal.position] = meal;
 
   let html = "<thead><tr><th></th>";
-  for (const slot of usedSlots) html += `<th>${SLOT_LABEL[slot]}</th>`;
+  for (const position of positions) {
+    html += `<th>${escapeHtml(columnLabel(plan.meals, position))}</th>`;
+  }
   html += "</tr></thead><tbody>";
 
   for (const day of DAYS) {
     html += `<tr><th>${DAY_LABEL[day]}</th>`;
-    for (const slot of usedSlots) {
-      const meal = byCell[day + "|" + slot];
+    for (const position of positions) {
+      const meal = byCell[day + "|" + position];
       html += meal
         ? `<td class="meal" data-recipe="${meal.recipe_id}">${escapeHtml(meal.recipe)}` +
           (meal.servings !== 1 ? `<br><span class="muted">×${meal.servings} raciones</span>` : "") +
@@ -824,39 +1438,190 @@ $("load-shopping").addEventListener("click", async () => {
 
 $("reload-jobs").addEventListener("click", loadJobs);
 
+let jobs = [];
+
 async function loadJobs() {
   const { status, data } = await api("/jobs");
   if (status !== 200) return;
 
-  text($("jobs-count"), `${data.length} trabajo(s)`);
+  jobs = data;
+  text($("jobs-count"), `${jobs.length} trabajo(s)`);
+  renderTotals();
+  renderJobs();
+}
 
-  let html = "<thead><tr><th>id</th><th>tipo</th><th>estado</th><th>intentos</th>" +
-             "<th>modelo</th><th>duración</th><th>tokens</th><th>coste</th><th>error</th></tr></thead><tbody>";
+/**
+ * Los agregados: cuánto llevo gastado, cuánto tarda cada modelo y cuántas fallan.
+ *
+ * Es lo único que esta página calcula, y es aritmética sobre lo que ya trae
+ * `GET /jobs`: sumar lo facturado y contar estados. Nada que la API no haya dicho.
+ *
+ * **Se suma `billed_cost` y no `llm_cost`, y la diferencia importa.** `llm_cost`
+ * es lo que costó la llamada que salió bien; `billed_cost` es lo que costó el
+ * trabajo entero, reintentos incluidos. Un trabajo que acierta a la tercera cobra
+ * tres veces, y son justo los trabajos que hay que mirar al tocar el prompt. Los
+ * trabajos anteriores a que el worker empezara a sumarlo solo tienen `llm_cost`,
+ * así que se usa como respaldo y el total de antes sigue siendo el de antes.
+ */
+function billedCost(result) {
+  return Number(result.billed_cost ?? result.llm_cost) || 0;
+}
 
-  for (const job of data) {
+function jobStats() {
+  const finished = jobs.filter((j) => j.state === "completed" || j.state === "failed");
+  const failed = finished.filter((j) => j.state === "failed");
+
+  const byModel = {};
+  let cost = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+
+  for (const job of jobs) {
+    const result = job.result || {};
+    cost += billedCost(result);
+    tokensIn += Number(result.billed_prompt_tokens ?? result.llm_prompt_tokens) || 0;
+    tokensOut += Number(result.billed_completion_tokens ?? result.llm_completion_tokens) || 0;
+
+    const model = result.llm_model;
+    if (!model) continue;
+    const row = byModel[model] || (byModel[model] = { runs: 0, ms: 0, cost: 0 });
+    row.runs += 1;
+    row.ms += Number(result.llm_duration_ms) || 0;
+    row.cost += billedCost(result);
+  }
+
+  return {
+    cost, tokensIn, tokensOut, byModel,
+    finished: finished.length,
+    failed: failed.length,
+    // Sin trabajos terminados no hay tasa que dar: un 0 % diría que todo va bien.
+    failureRate: finished.length ? (failed.length / finished.length) * 100 : null,
+  };
+}
+
+function renderTotals() {
+  const stats = jobStats();
+  const tiles = [
+    ["gastado en total", "$" + stats.cost.toFixed(4)],
+    ["tokens de entrada", stats.tokensIn.toLocaleString("es-ES")],
+    ["tokens de salida", stats.tokensOut.toLocaleString("es-ES")],
+    ["trabajos terminados", String(stats.finished)],
+    ["generaciones fallidas",
+     stats.failureRate === null ? "—"
+       : `${stats.failed} · ${stats.failureRate.toFixed(0)} %`,
+     stats.failed > 0],
+  ];
+
+  $("totals").innerHTML = tiles.map(([key, value, bad]) =>
+    `<div class="tile"><div class="k">${key}</div>
+     <div class="v${bad ? " bad" : ""}">${escapeHtml(value)}</div></div>`).join("");
+
+  const models = Object.entries(stats.byModel).sort((a, b) => b[1].runs - a[1].runs);
+  if (!models.length) {
+    $("by-model").innerHTML =
+      '<tbody><tr><td class="muted">todavía no ha intervenido ningún modelo</td></tr></tbody>';
+    return;
+  }
+
+  let html = "<thead><tr><th>modelo</th><th class='num'>pasadas</th>" +
+             "<th class='num'>duración media</th><th class='num'>coste medio</th>" +
+             "<th class='num'>coste total</th></tr></thead><tbody>";
+  for (const [model, row] of models) {
+    html += `<tr>
+      <td><code>${escapeHtml(model)}</code></td>
+      <td class="num">${row.runs}</td>
+      <td class="num">${(row.ms / row.runs / 1000).toFixed(1)} s</td>
+      <td class="num">$${(row.cost / row.runs).toFixed(5)}</td>
+      <td class="num">$${row.cost.toFixed(4)}</td>
+    </tr>`;
+  }
+  $("by-model").innerHTML = html + "</tbody>";
+}
+
+function renderJobs() {
+  let html = "<thead><tr><th>id</th><th>tipo</th><th>estado</th><th class='num'>intentos</th>" +
+             "<th>modelo</th><th class='num'>duración</th><th class='num'>entrada</th>" +
+             "<th class='num'>salida</th><th class='num'>coste</th><th>ver</th>" +
+             "<th>error</th></tr></thead><tbody>";
+
+  for (const job of jobs) {
     // El consumo lo deja el worker dentro de `result`; un trabajo fallido no
     // llegó a tenerlo, así que estas celdas salen vacías y eso ya informa.
     const result = job.result || {};
     const duration = result.llm_duration_ms
       ? (result.llm_duration_ms / 1000).toFixed(1) + " s" : "—";
-    const tokens = result.llm_total_tokens
-      ? `${result.llm_prompt_tokens}/${result.llm_completion_tokens}` : "—";
 
     html += `<tr>
       <td>${job.id}</td>
-      <td>${job.type}</td>
-      <td><span class="pill ${job.state}">${job.state}</span></td>
-      <td>${job.attempts}</td>
+      <td>${escapeHtml(job.type)}</td>
+      <td><span class="pill ${escapeHtml(job.state)}">${escapeHtml(job.state)}</span></td>
+      <td class="num">${job.attempts}</td>
       <td><code>${escapeHtml(result.llm_model || "—")}</code></td>
-      <td>${duration}</td>
-      <td>${tokens}</td>
-      <td>${result.llm_cost !== undefined ? result.llm_cost : "—"}</td>
+      <td class="num">${duration}</td>
+      <td class="num">${result.llm_prompt_tokens ?? "—"}</td>
+      <td class="num">${result.llm_completion_tokens ?? "—"}</td>
+      <td class="num">${result.billed_cost === undefined && result.llm_cost === undefined
+          ? "—" : "$" + billedCost(result).toFixed(5)}${
+          // Cuando el trabajo necesitó varias llamadas, se dice: es la diferencia
+          // entre "este plan costó tres céntimos" y "conseguir este plan costó
+          // tres céntimos", que no es la misma frase.
+          result.billed_calls > 1 ? `<br><span class="muted">${result.billed_calls} llamadas</span>` : ""}</td>
+      <td class="pick">
+        <button data-raw="input" data-job="${job.id}">input</button>
+        <button data-raw="result" data-job="${job.id}">result</button>
+      </td>
       <td class="muted" style="max-width:340px">${job.error ? escapeHtml(job.error) : ""}</td>
     </tr>`;
   }
-  html += "</tbody>";
-  $("jobs-table").innerHTML = html;
+  $("jobs-table").innerHTML = html + "</tbody>";
+
+  $("jobs-table").querySelectorAll("button[data-raw]").forEach((button) =>
+    button.addEventListener("click", () =>
+      openRaw(Number(button.dataset.job), button.dataset.raw)));
 }
+
+/**
+ * Enseña el JSON en crudo de un trabajo.
+ *
+ * **`input` es el que hacía falta y no había.** Lleva el perfil y el catálogo
+ * exactos con los que se generó ese plan, así que cuando un plan sale mal es lo
+ * que dice si se equivocó el modelo o si le mandé mal los datos. El listado lo
+ * omite —el catálogo entero por cada trabajo serían megabytes—, así que se pide
+ * el trabajo suelto, que sí lo trae.
+ */
+async function openRaw(jobId, which) {
+  const { status, data } = await api(`/jobs/${jobId}`);
+  if (status !== 200) return flash(apiError(data, "no se ha podido cargar el trabajo"), "err");
+
+  const payload = which === "input" ? data.input : data.result;
+  const foods = (data.input && data.input.foods) || [];
+
+  let html = `<h2 style="color:var(--fg);font-size:1.05rem;text-transform:none;letter-spacing:0">
+                trabajo ${data.id} · <code>${escapeHtml(which)}</code></h2>
+              <p class="muted">${escapeHtml(data.type)} ·
+                 <span class="pill ${escapeHtml(data.state)}">${escapeHtml(data.state)}</span>
+                 · intento ${data.attempts}</p>`;
+
+  if (which === "input" && foods.length) {
+    // El recuento de alimentos arriba del todo: es lo primero que hay que mirar
+    // para saber si los filtros de alergia y preferencia hicieron su trabajo.
+    html += `<p class="muted"><strong>${foods.length}</strong> alimentos en la lista
+             que vio el modelo. Si falta lo que esperabas ver, el filtro funcionó;
+             si sobra, no.</p>`;
+  }
+
+  if (data.error) {
+    html += `<div class="warn-box" style="border-color:var(--bad);color:var(--bad)">
+               ${escapeHtml(data.error)}</div>`;
+  }
+
+  html += `<pre class="raw">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+
+  $("raw-body").innerHTML = html;
+  $("raw-dialog").showModal();
+}
+
+$("close-raw").addEventListener("click", () => $("raw-dialog").close());
 
 /**
  * Todo lo que viene de la API se escapa antes de meterlo en el HTML.
