@@ -9,7 +9,7 @@ en una cola: el worker recibe este resumen ya calculado dentro del `input` del
 trabajo y no lo recalcula (3.10).
 """
 from ..catalog.models import NUTRITION_FIELDS
-from .models import DAYS_OF_WEEK, MEAL_SLOTS
+from .models import DAYS_OF_WEEK
 
 
 def _empty_totals():
@@ -70,7 +70,8 @@ def summarize(plan):
 
         if day is not None:
             meals_per_day[day].append({
-                "meal_slot": meal.meal_slot,
+                "position": meal.position,
+                "label": meal.label,
                 "recipe": recipe.name,
                 "servings": meal.servings,
             })
@@ -87,11 +88,9 @@ def summarize(plan):
             {
                 "day_of_week": day,
                 "totals": _rounded(per_day[day]),
-                "meals": sorted(
-                    meals_per_day[day],
-                    key=lambda m: MEAL_SLOTS.index(m["meal_slot"])
-                    if m["meal_slot"] in MEAL_SLOTS else 99,
-                ),
+                # Por posición dentro del día, que ya viene ordenada de fábrica:
+                # una de las ventajas de que la clave sea un número.
+                "meals": sorted(meals_per_day[day], key=lambda m: m["position"]),
             }
             for day in days_with_meals
         ],

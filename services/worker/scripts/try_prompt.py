@@ -108,16 +108,16 @@ SAMPLE_NUTRITION = {
             "day_of_week": "monday",
             "totals": {"energy_kcal": 2600.0, "protein_g": 150.0},
             "meals": [
-                {"meal_slot": "breakfast", "recipe": "Avena con plátano", "servings": 1},
-                {"meal_slot": "lunch", "recipe": "Arroz con pollo", "servings": 1.5},
-                {"meal_slot": "dinner", "recipe": "Merluza al horno", "servings": 1},
+                {"position": 1, "label": "Desayuno", "recipe": "Avena con plátano", "servings": 1},
+                {"position": 2, "label": "Comida", "recipe": "Arroz con pollo", "servings": 1.5},
+                {"position": 3, "label": "Cena", "recipe": "Merluza al horno", "servings": 1},
             ],
         },
         {
             "day_of_week": "sunday",
             "totals": {"energy_kcal": 1250.0, "protein_g": 70.0},
             "meals": [
-                {"meal_slot": "lunch", "recipe": "Ensalada de garbanzos", "servings": 1},
+                {"position": 1, "label": "Comida", "recipe": "Ensalada de garbanzos", "servings": 1},
             ],
         },
     ],
@@ -158,7 +158,7 @@ def _validate(job, data, job_input):
     if job == "plan_review":
         return validation.validate_review(data)
     allowed = {food["id"] for food in job_input["foods"]}
-    return validation.validate_plan(data, allowed)
+    return validation.validate_plan(data, allowed, job_input["profile"])
 
 
 def _describe(job, validated):

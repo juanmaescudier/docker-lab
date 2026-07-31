@@ -22,7 +22,9 @@ from ..users.models import User
 from . import ai, shopping_list
 from .models import (
     DAYS_OF_WEEK,
-    MEAL_SLOTS,
+    MAX_LABEL_LENGTH,
+    MAX_POSITION,
+    MIN_POSITION,
     SOURCE_MANUAL,
     Plan,
     PlannedMeal,
@@ -58,39 +60,57 @@ def _validate_meals(raw):
 
     normalized = []
     used_recipes = set()
+    occupied = set()
 
-    for position, item in enumerate(raw, start=1):
+    for number, item in enumerate(raw, start=1):
         if not isinstance(item, dict):
-            return None, f"la comida {position} debe ser un objeto"
+            return None, f"la comida {number} debe ser un objeto"
 
         day = item.get("day_of_week")
         if day not in DAYS_OF_WEEK:
             return None, (
-                f"la comida {position}: 'day_of_week' debe ser uno de: "
+                f"la comida {number}: 'day_of_week' debe ser uno de: "
                 + ", ".join(DAYS_OF_WEEK)
             )
 
-        slot = item.get("meal_slot")
-        if slot not in MEAL_SLOTS:
+        position = item.get("position")
+        if isinstance(position, bool) or not isinstance(position, int):
+            return None, f"la comida {number}: 'position' debe ser un entero"
+        if not MIN_POSITION <= position <= MAX_POSITION:
             return None, (
-                f"la comida {position}: 'meal_slot' debe ser uno de: "
-                + ", ".join(MEAL_SLOTS)
+                f"la comida {number}: 'position' debe estar entre {MIN_POSITION} "
+                f"y {MAX_POSITION}"
             )
+
+        # Se comprueba aquí además de en el índice único de la tabla para que el
+        # cliente reciba un 400 con el hueco repetido en vez de un error de
+        # PostgreSQL con el nombre del índice.
+        if (day, position) in occupied:
+            return None, (
+                f"la comida {number}: ya hay una comida en la posición "
+                f"{position} de {day}"
+            )
+        occupied.add((day, position))
+
+        label = item.get("label")
+        if label is not None and not isinstance(label, str):
+            return None, f"la comida {number}: 'label' debe ser un texto"
 
         recipe_id = item.get("recipe_id")
         if isinstance(recipe_id, bool) or not isinstance(recipe_id, int):
-            return None, f"la comida {position} necesita un 'recipe_id' entero"
+            return None, f"la comida {number} necesita un 'recipe_id' entero"
 
         servings = item.get("servings", 1)
         if isinstance(servings, bool) or not isinstance(servings, (int, float)):
-            return None, f"la comida {position} necesita 'servings' numérico"
+            return None, f"la comida {number} necesita 'servings' numérico"
         if servings <= 0:
-            return None, f"las raciones de la comida {position} deben ser mayores que cero"
+            return None, f"las raciones de la comida {number} deben ser mayores que cero"
 
         used_recipes.add(recipe_id)
         normalized.append({
             "day_of_week": day,
-            "meal_slot": slot,
+            "position": position,
+            "label": (label.strip()[:MAX_LABEL_LENGTH] or None) if label else None,
             "recipe_id": recipe_id,
             "servings": float(servings),
         })
@@ -230,6 +250,18 @@ def generate_plan():
     """
     user_id = current_user_id()
     user = db.session.get(User, user_id)
+
+    # **El cribado corta aquí también, no solo en la pantalla** (3.18). Una
+    # comprobación que vive únicamente en el formulario la salta cualquiera que
+    # llame al endpoint, y esta es de las que no puede depender de la interfaz.
+    # No se mira QUÉ declaró —eso no está guardado en ninguna parte—, solo si
+    # llegó a pasarlo.
+    if user.screening_passed_at is None:
+        return jsonify(error=(
+            "antes de generar un plan hay que pasar el cribado inicial: esta "
+            "herramienta organiza menús para personas sanas y no sustituye a un "
+            "profesional sanitario"
+        )), 409
 
     missing = [f for f in REQUIRED_PROFILE_FIELDS if getattr(user, f) is None]
     if missing:

@@ -131,14 +131,27 @@ def process_job(conn, job_id, provider):
 
     max_attempts = max(1, _int_env("JOB_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS))
 
-    def log_response(response):
-        """Deja el consumo de cada llamada en el log JSON.
+    # Lo que ha cobrado el modelo en ESTE trabajo, sumando todos los intentos.
+    #
+    # **Un intento fallido se paga igual y no deja `result`**, así que sin esto el
+    # gasto total que se ve en el panel se queda corto justo en los trabajos que
+    # más han costado: el que acierta a la tercera cobra tres veces y solo declara
+    # una. Y esos son precisamente los que hay que ver al tocar el prompt.
+    spent = {"cost": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
 
-        Es el primer paso para poder medir el coste: con estos campos en Kibana
-        se agrega por modelo y se ve qué cuesta cada tipo de trabajo. Métricas de
+    def log_response(response):
+        """Deja el consumo de cada llamada en el log JSON y lo va sumando.
+
+        El log es lo que permite agregar por modelo en Kibana; la suma es lo que
+        acaba en `jobs.result`, que es de donde lo lee el panel. Métricas de
         Prometheus todavía no: un proceso sin servidor HTTP no tiene por dónde
         exponerlas, y eso es una decisión de infraestructura aparte.
         """
+        spent["cost"] += response.cost or 0.0
+        spent["prompt_tokens"] += response.prompt_tokens or 0
+        spent["completion_tokens"] += response.completion_tokens or 0
+        spent["calls"] += 1
+
         log.info(
             "llamada al modelo completada",
             extra={"extra_fields": {
@@ -148,6 +161,15 @@ def process_job(conn, job_id, provider):
                 **response.usage_fields(),
             }},
         )
+
+    def billed():
+        """El consumo acumulado, para guardarlo termine como termine el trabajo."""
+        return {
+            "billed_cost": round(spent["cost"], 8),
+            "billed_prompt_tokens": spent["prompt_tokens"],
+            "billed_completion_tokens": spent["completion_tokens"],
+            "billed_calls": spent["calls"],
+        }
 
     for attempt in range(1, max_attempts + 1):
         try:
@@ -170,7 +192,10 @@ def process_job(conn, job_id, provider):
             )
 
             if not will_retry:
-                db.fail_job(conn, job_id, error)
+                # El trabajo se da por fallido, pero lo que ya ha cobrado el
+                # modelo se guarda igual: un trabajo que falla tres veces cuesta
+                # dinero, y no anotarlo lo haría invisible en el gasto total.
+                db.fail_job(conn, job_id, error, billed())
                 return
 
             # Se anota el error aunque el trabajo siga vivo: si al final agota
@@ -198,7 +223,10 @@ def process_job(conn, job_id, provider):
             return
 
         else:
-            db.complete_job(conn, job_id, result)
+            # `billed()` va DESPUÉS del resultado del manejador para que mande él:
+            # el trabajo que acierta a la tercera declara el coste de las tres
+            # llamadas, no el de la última.
+            db.complete_job(conn, job_id, {**result, **billed()})
             log.info(
                 "trabajo completado",
                 extra={"extra_fields": {

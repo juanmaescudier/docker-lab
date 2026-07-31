@@ -97,15 +97,22 @@ def complete_job(conn, job_id, result):
         )
 
 
-def fail_job(conn, job_id, error):
+def fail_job(conn, job_id, error, billed=None):
+    """Marca el trabajo como fallido, guardando lo que ya haya cobrado el modelo.
+
+    **Un trabajo fallido no es un trabajo gratis.** Si agotó tres intentos, se han
+    pagado tres llamadas y no hay plan que enseñar; dejar `result` a nulo haría
+    que ese gasto no apareciera en ninguna suma. Lo que se guarda no es un
+    resultado —no lo hay—, es la factura.
+    """
     with conn.cursor() as cur:
         cur.execute(
             """
             UPDATE jobs
-               SET state = 'failed', error = %s, updated_at = NOW()
+               SET state = 'failed', error = %s, result = %s, updated_at = NOW()
              WHERE id = %s
             """,
-            (error[:2000], job_id),
+            (error[:2000], Json(billed) if billed else None, job_id),
         )
 
 
@@ -169,14 +176,15 @@ def write_generated_plan(conn, job_id, user_id, plan):
             cur.executemany(
                 """
                 INSERT INTO planned_meals
-                       (plan_id, day_of_week, meal_slot, recipe_id, servings)
-                VALUES (%s, %s, %s, %s, %s)
+                       (plan_id, day_of_week, position, label, recipe_id, servings)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 [
                     (
                         plan_id,
                         meal["day_of_week"],
-                        meal["meal_slot"],
+                        meal["position"],
+                        meal["label"],
                         recipe_ids[meal["recipe_index"]],
                         meal["servings"],
                     )

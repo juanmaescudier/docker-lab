@@ -52,7 +52,7 @@ def handle_plan_generation(conn, job, provider, log_response):
     # catálogo de ahora: si alguien borró un alimento mientras el trabajo estaba
     # en la cola, escribirlo daría un fallo de clave ajena.
     allowed = {food["id"] for food in foods if isinstance(food.get("id"), int)}
-    plan = validation.validate_plan(response.data, allowed)
+    plan = validation.validate_plan(response.data, allowed, job_input.get("profile"))
 
     try:
         plan_id, recipe_ids = db.write_generated_plan(
