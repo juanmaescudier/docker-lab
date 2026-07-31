@@ -21,7 +21,7 @@ SEED_FILE = Path(__file__).resolve().parent / "seed.json"
 # JSON entero al constructor: así un campo nuevo o inesperado en el fichero no
 # acaba silenciosamente en la tabla.
 FIELDS = (
-    "name", "category", "state",
+    "name", "category", "state", "allergens",
     "energy_kcal", "fat_g", "saturated_fat_g", "carbs_g",
     "sugars_g", "fiber_g", "protein_g", "salt_g",
     "extra_nutrients", "external_id", "external_name",

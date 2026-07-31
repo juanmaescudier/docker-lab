@@ -89,7 +89,8 @@
     "external_name": "Chicken, breast, boneless, skinless, raw",
     "name": "pechuga de pollo",
     "category": "pollo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 121.0,
@@ -691,7 +692,8 @@
     "external_name": "Chicken, broilers or fryers, dark meat, thigh, meat only, raw",
     "name": "muslo de pollo",
     "category": "pollo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 143.0,
@@ -1338,7 +1340,10 @@
     "external_name": "Egg, whole, raw, fresh",
     "name": "huevo de gallina",
     "category": "huevo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "eggs"
+    ]
   },
   {
     "energy_kcal": 52.0,
@@ -1800,7 +1805,10 @@
     "external_name": "Egg, white, raw, fresh",
     "name": "clara de huevo",
     "category": "huevo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "eggs"
+    ]
   },
   {
     "energy_kcal": 146.0,
@@ -1892,7 +1900,8 @@
     "external_name": "Beef, round, top round, boneless, choice, raw",
     "name": "ternera, filete magro",
     "category": "ternera",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 174.0,
@@ -1984,7 +1993,8 @@
     "external_name": "Pork, loin, boneless, raw",
     "name": "lomo de cerdo",
     "category": "cerdo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 208.0,
@@ -2521,7 +2531,10 @@
     "external_name": "Fish, salmon, Atlantic, farmed, raw",
     "name": "salmón",
     "category": "pescado",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "fish"
+    ]
   },
   {
     "energy_kcal": 82.0,
@@ -2983,7 +2996,10 @@
     "external_name": "Fish, cod, Atlantic, raw",
     "name": "bacalao",
     "category": "pescado",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "fish"
+    ]
   },
   {
     "energy_kcal": 90.0,
@@ -3505,7 +3521,10 @@
     "external_name": "Fish, tuna, light, canned in water, drained solids",
     "name": "atún en conserva al natural",
     "category": "pescado",
-    "state": "canned"
+    "state": "canned",
+    "allergens": [
+      "fish"
+    ]
   },
   {
     "energy_kcal": 85.0,
@@ -3827,7 +3846,10 @@
     "external_name": "Crustaceans, shrimp, raw",
     "name": "gambas",
     "category": "marisco",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "crustaceans"
+    ]
   },
   {
     "energy_kcal": 60.0,
@@ -4594,7 +4616,10 @@
     "external_name": "Milk, whole, 3.25% milkfat, with added vitamin D",
     "name": "leche entera",
     "category": "lacteo",
-    "state": "liquid"
+    "state": "liquid",
+    "allergens": [
+      "milk"
+    ]
   },
   {
     "energy_kcal": 35.0,
@@ -4921,7 +4946,10 @@
     "external_name": "Milk, fluid, nonfat, calcium fortified (fat free or skim)",
     "name": "leche desnatada",
     "category": "lacteo",
-    "state": "liquid"
+    "state": "liquid",
+    "allergens": [
+      "milk"
+    ]
   },
   {
     "energy_kcal": 61.0,
@@ -5353,7 +5381,10 @@
     "external_name": "Yogurt, plain, whole milk",
     "name": "yogur natural",
     "category": "lacteo",
-    "state": null
+    "state": null,
+    "allergens": [
+      "milk"
+    ]
   },
   {
     "energy_kcal": 72.0,
@@ -5780,7 +5811,10 @@
     "external_name": "Cheese, cottage, lowfat, 1% milkfat",
     "name": "queso fresco batido",
     "category": "lacteo",
-    "state": null
+    "state": null,
+    "allergens": [
+      "milk"
+    ]
   },
   {
     "energy_kcal": 408.0,
@@ -6287,7 +6321,10 @@
     "external_name": "Cheese, cheddar",
     "name": "queso curado",
     "category": "lacteo",
-    "state": null
+    "state": null,
+    "allergens": [
+      "milk"
+    ]
   },
   {
     "energy_kcal": 370.0,
@@ -6409,7 +6446,8 @@
     "external_name": "Rice, white, long grain, unenriched, raw",
     "name": "arroz blanco",
     "category": "cereal",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 368.0,
@@ -6531,7 +6569,8 @@
     "external_name": "Rice, brown, long grain, unenriched, raw",
     "name": "arroz integral",
     "category": "cereal",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 371.0,
@@ -7133,7 +7172,10 @@
     "external_name": "Pasta, dry, enriched",
     "name": "pasta",
     "category": "cereal",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "gluten"
+    ]
   },
   {
     "energy_kcal": 379.0,
@@ -7260,7 +7302,10 @@
     "external_name": "Oats, whole grain, rolled, old fashioned",
     "name": "avena en copos",
     "category": "cereal",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "gluten"
+    ]
   },
   {
     "energy_kcal": 368.0,
@@ -7762,7 +7807,8 @@
     "external_name": "Quinoa, uncooked",
     "name": "quinoa",
     "category": "cereal",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 266.0,
@@ -8274,7 +8320,10 @@
     "external_name": "Bread, white, commercially prepared (includes soft bread crumbs)",
     "name": "pan blanco",
     "category": "pan",
-    "state": null
+    "state": null,
+    "allergens": [
+      "gluten"
+    ]
   },
   {
     "energy_kcal": 252.0,
@@ -8831,7 +8880,10 @@
     "external_name": "Bread, whole-wheat, commercially prepared",
     "name": "pan integral",
     "category": "pan",
-    "state": null
+    "state": null,
+    "allergens": [
+      "gluten"
+    ]
   },
   {
     "energy_kcal": 77.0,
@@ -9318,7 +9370,8 @@
     "external_name": "Potatoes, flesh and skin, raw",
     "name": "patata",
     "category": "tuberculo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 86.0,
@@ -9875,7 +9928,8 @@
     "external_name": "Sweet potato, raw, unprepared (Includes foods for USDA's Food Distribution Program)",
     "name": "boniato",
     "category": "tuberculo",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 352.0,
@@ -10372,7 +10426,8 @@
     "external_name": "Lentils, raw",
     "name": "lentejas",
     "category": "legumbre",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 378.0,
@@ -10799,7 +10854,8 @@
     "external_name": "Chickpeas (garbanzo beans, bengal gram), mature seeds, raw",
     "name": "garbanzos",
     "category": "legumbre",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 333.0,
@@ -11226,7 +11282,8 @@
     "external_name": "Beans, white, mature seeds, raw",
     "name": "alubias blancas",
     "category": "legumbre",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 884.0,
@@ -11708,7 +11765,8 @@
     "external_name": "Oil, olive, salad or cooking",
     "name": "aceite de oliva virgen extra",
     "category": "aceite",
-    "state": null
+    "state": null,
+    "allergens": []
   },
   {
     "energy_kcal": 167.0,
@@ -12255,7 +12313,8 @@
     "external_name": "Avocados, raw, California",
     "name": "aguacate",
     "category": "fruta",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 584.0,
@@ -12472,7 +12531,10 @@
     "external_name": "Nuts, almonds, whole, raw",
     "name": "almendras",
     "category": "fruto_seco",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "nuts"
+    ]
   },
   {
     "energy_kcal": 654.0,
@@ -13014,7 +13076,10 @@
     "external_name": "Nuts, walnuts, english",
     "name": "nueces",
     "category": "fruto_seco",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "nuts"
+    ]
   },
   {
     "energy_kcal": 551.0,
@@ -13091,7 +13156,10 @@
     "external_name": "Peanuts, raw",
     "name": "cacahuetes",
     "category": "fruto_seco",
-    "state": "raw"
+    "state": "raw",
+    "allergens": [
+      "peanuts"
+    ]
   },
   {
     "energy_kcal": 89.0,
@@ -13608,7 +13676,8 @@
     "external_name": "Bananas, raw",
     "name": "plátano",
     "category": "fruta",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 58.2,
@@ -13730,7 +13799,8 @@
     "external_name": "Apples, fuji, with skin, raw",
     "name": "manzana",
     "category": "fruta",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 47.0,
@@ -14157,7 +14227,8 @@
     "external_name": "Oranges, raw, all commercial varieties",
     "name": "naranja",
     "category": "fruta",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 32.0,
@@ -14674,7 +14745,8 @@
     "external_name": "Strawberries, raw",
     "name": "fresas",
     "category": "fruta",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 18.0,
@@ -15191,7 +15263,8 @@
     "external_name": "Tomatoes, red, ripe, raw, year round average",
     "name": "tomate",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 40.0,
@@ -15758,7 +15831,8 @@
     "external_name": "Onions, raw",
     "name": "cebolla",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 26.0,
@@ -16315,7 +16389,8 @@
     "external_name": "Peppers, sweet, red, raw",
     "name": "pimiento rojo",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 31.0,
@@ -16822,7 +16897,8 @@
     "external_name": "Broccoli, raw",
     "name": "brócoli",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 23.0,
@@ -17324,7 +17400,8 @@
     "external_name": "Spinach, raw",
     "name": "espinacas",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 17.0,
@@ -17921,7 +17998,8 @@
     "external_name": "Squash, summer, zucchini, includes skin, raw",
     "name": "calabacín",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 17.0,
@@ -18428,7 +18506,8 @@
     "external_name": "Lettuce, cos or romaine, raw",
     "name": "lechuga",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 41.0,
@@ -18990,7 +19069,8 @@
     "external_name": "Carrots, raw",
     "name": "zanahoria",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   },
   {
     "energy_kcal": 22.0,
@@ -19592,6 +19672,7 @@
     "external_name": "Mushrooms, white, raw",
     "name": "champiñones",
     "category": "verdura",
-    "state": "raw"
+    "state": "raw",
+    "allergens": []
   }
 ]

@@ -8,6 +8,7 @@ relación, no aquí (3.4).
 import unicodedata
 from datetime import datetime, timezone
 
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import validates
 
 from ..extensions import db
@@ -36,6 +37,49 @@ NUTRITION_FIELDS = (
     "protein_g",
     "salt_g",
 )
+
+# Los **14 alérgenos de declaración obligatoria** del anexo II del reglamento
+# europeo de información alimentaria. Se usa esa lista y no una inventada por tres
+# motivos: es la que la gente ya conoce de las etiquetas, es exhaustiva para lo
+# que la ley considera relevante, y evita discutir qué entra y qué no.
+#
+# La misma lista vale para marcar un alimento y para que el usuario declare sus
+# alergias: por eso vive aquí y la importa el dominio de usuarios, en vez de estar
+# escrita dos veces.
+ALLERGENS = (
+    "gluten",        # cereales con gluten (trigo, centeno, cebada, avena...)
+    "crustaceans",   # crustáceos
+    "eggs",          # huevos
+    "fish",          # pescado
+    "peanuts",       # cacahuetes: alérgeno propio, NO son frutos de cáscara
+    "soy",           # soja
+    "milk",          # leche y derivados, lactosa incluida
+    "nuts",          # frutos de cáscara (almendra, nuez, avellana, anacardo...)
+    "celery",        # apio
+    "mustard",       # mostaza
+    "sesame",        # granos de sésamo
+    "sulphites",     # dióxido de azufre y sulfitos por encima de 10 mg/kg
+    "lupin",         # altramuces
+    "molluscs",      # moluscos
+)
+
+
+# Qué categorías del catálogo quedan fuera según la preferencia alimentaria. La
+# preferencia **filtra el catálogo** (3.16), y filtrarlo hace falta que se pueda
+# decidir mirando la fila: la categoría es lo único que hay.
+#
+# Es una correspondencia frágil y conviene saberlo: las categorías las escribe a
+# mano quien genera la semilla, así que una categoría nueva —"cordero"— no
+# estaría en ninguna de estas listas y un vegano la vería. Aguanta mientras el
+# catálogo lo escriba yo; en cuanto entre la importación de USDA hará falta que
+# el alimento diga si es de origen animal, igual que dice sus alérgenos.
+MEAT_AND_FISH_CATEGORIES = ("pollo", "ternera", "cerdo", "pescado", "marisco")
+ANIMAL_PRODUCT_CATEGORIES = ("lacteo", "huevo")
+
+EXCLUDED_CATEGORIES_BY_PREFERENCE = {
+    "vegetarian": MEAT_AND_FISH_CATEGORIES,
+    "vegan": MEAT_AND_FISH_CATEGORIES + ANIMAL_PRODUCT_CATEGORIES,
+}
 
 
 def _now():
@@ -84,6 +128,19 @@ class Food(db.Model):
     # filtra ni se suma, así que no merece una columna propia (3.8).
     extra_nutrients = db.Column(db.JSON)
 
+    # Qué alérgenos de los 14 obligatorios lleva este alimento (3.17). Es una
+    # lista y no una tabla aparte porque no tiene atributos propios ni se consulta
+    # nunca "dame los alimentos con sésamo": solo se cruza con las alergias del
+    # usuario para QUITAR filas, y para eso un `&&` sobre el array basta.
+    #
+    # **El nulo no significa "no tiene alérgenos", significa "no lo sé"**, y por eso
+    # la columna admite nulo en vez de tener `[]` por defecto. Un alimento sin
+    # revisar no entra en la lista que ve el modelo si el usuario ha declarado
+    # alguna alergia: prefiero un plan con menos opciones que uno con cacahuetes
+    # para un alérgico. Es el mismo criterio de "el defecto es el seguro" que la
+    # marca de revisado (3.21), con la que acabará juntándose.
+    allergens = db.Column(ARRAY(db.String(20)))
+
     source = db.Column(db.String(10), nullable=False, default=SOURCE_MANUAL, index=True)
     # Identificador de USDA (fdcId). Nulo en los alimentos creados a mano.
     external_id = db.Column(db.String(40))
@@ -122,6 +179,10 @@ class Food(db.Model):
             "name": self.name,
             "category": self.category,
             "state": self.state,
+            # Va también en los listados: es dato de seguridad, y una interfaz que
+            # tenga que pedir el alimento entero para saber si lleva cacahuete
+            # acabará por no preguntarlo.
+            "allergens": self.allergens,
             "energy_kcal": self.energy_kcal,
             "fat_g": self.fat_g,
             "saturated_fat_g": self.saturated_fat_g,

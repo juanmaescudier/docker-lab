@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..session import login_required
 from .models import (
+    ALLERGENS,
     NUTRITION_FIELDS,
     SOURCE_MANUAL,
     STATES,
@@ -58,6 +59,20 @@ def _validate(data, require_name):
     if state is not None and state not in STATES:
         return f"'state' debe ser uno de: {', '.join(STATES)}"
 
+    # Se distingue el nulo de la lista vacía a propósito: `null` es "no lo sé" y
+    # `[]` es "revisado, no lleva ninguno". Son cosas distintas y la segunda es la
+    # única que deja al alimento entrar en el plan de un alérgico (3.17).
+    if "allergens" in data and data["allergens"] is not None:
+        allergens = data["allergens"]
+        if not isinstance(allergens, list):
+            return "'allergens' debe ser una lista (o null si no se ha revisado)"
+        unknown = [a for a in allergens if a not in ALLERGENS]
+        if unknown:
+            return (
+                "estos alérgenos no están entre los 14 de declaración obligatoria: "
+                + ", ".join(str(a) for a in unknown)
+            )
+
     for field in NUTRITION_FIELDS:
         value = data.get(field)
         if value is None:
@@ -74,8 +89,14 @@ def _validate(data, require_name):
 
 def _apply(food, data):
     """Vuelca al alimento solo los campos presentes en el cuerpo."""
-    for field in ("name", "category", "state", "extra_nutrients", *NUTRITION_FIELDS):
+    for field in ("name", "category", "state", "extra_nutrients", "allergens",
+                  *NUTRITION_FIELDS):
         if field in data:
+            # Sin duplicados y en el orden de la lista oficial: así dos alimentos
+            # con los mismos alérgenos se guardan igual y se comparan a simple vista.
+            if field == "allergens" and data[field] is not None:
+                setattr(food, field, [a for a in ALLERGENS if a in data[field]])
+                continue
             setattr(food, field, data[field])
 
 

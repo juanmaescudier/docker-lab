@@ -28,7 +28,15 @@ DESTINATION = API_ROOT / "app" / "catalog" / "seed.json"
 sys.path.insert(0, str(API_ROOT / "app" / "catalog"))
 import usda  # noqa: E402
 
-# nombre en español · categoría · estado (None si no aplica) · término en inglés.
+# nombre en español · categoría · estado (None si no aplica) · alérgenos ·
+# término en inglés.
+#
+# **Los alérgenos se marcan aquí y no en el JSON** aunque el JSON sea lo que se
+# carga: si vivieran solo allí, la siguiente regeneración se los llevaría por
+# delante. Son los 14 de declaración obligatoria (`catalog/models.ALLERGENS`), y
+# una lista vacía significa "revisado, no lleva ninguno". USDA no publica esta
+# información, así que van a mano uno a uno; los cuatro casos que dieron duda
+# están comentados en su línea.
 #
 # Los términos de búsqueda son la parte frágil: si USDA cambia su catálogo o su
 # relevancia, se ajustan aquí y se vuelve a generar el JSON. Su buscador es muy
@@ -38,64 +46,73 @@ import usda  # noqa: E402
 # "orange raw" devolvía piel de naranja. Regla práctica: cuanto más se parece el
 # término a la descripción completa de USDA, menos margen hay para el error.
 FOODS = [
-    ("pechuga de pollo", "pollo", "raw", "chicken breast raw"),
+    ("pechuga de pollo", "pollo", "raw", [], "chicken breast raw"),
     # "chicken thigh raw" devolvía la PIEL del muslo (440 kcal).
-    ("muslo de pollo", "pollo", "raw", "chicken thigh meat only raw"),
-    ("huevo de gallina", "huevo", "raw", "egg whole raw"),
-    ("clara de huevo", "huevo", "raw", "egg white raw"),
-    ("ternera, filete magro", "ternera", "raw", "beef top round raw"),
-    ("lomo de cerdo", "cerdo", "raw", "pork loin raw"),
-    ("salmón", "pescado", "raw", "salmon atlantic raw"),
-    ("bacalao", "pescado", "raw", "cod atlantic raw"),
-    ("atún en conserva al natural", "pescado", "canned", "tuna light canned water"),
-    ("gambas", "marisco", "raw", "shrimp raw"),
+    ("muslo de pollo", "pollo", "raw", [], "chicken thigh meat only raw"),
+    ("huevo de gallina", "huevo", "raw", ["eggs"], "egg whole raw"),
+    ("clara de huevo", "huevo", "raw", ["eggs"], "egg white raw"),
+    ("ternera, filete magro", "ternera", "raw", [], "beef top round raw"),
+    ("lomo de cerdo", "cerdo", "raw", [], "pork loin raw"),
+    ("salmón", "pescado", "raw", ["fish"], "salmon atlantic raw"),
+    ("bacalao", "pescado", "raw", ["fish"], "cod atlantic raw"),
+    # DUDA: la ficha de USDA es genérica. Muchas conservas llevan además soja
+    # o sulfitos según la marca, y eso no se puede saber desde aquí.
+    ("atún en conserva al natural", "pescado", "canned", ["fish"], "tuna light canned water"),
+    ("gambas", "marisco", "raw", ["crustaceans"], "shrimp raw"),
     # "milk whole" devolvía mozzarella y "milk skim" yogur desnatado.
-    ("leche entera", "lacteo", "liquid", "milk whole 3.25% milkfat"),
-    ("leche desnatada", "lacteo", "liquid", "milk nonfat fluid"),
-    ("yogur natural", "lacteo", None, "yogurt plain whole milk"),
-    ("queso fresco batido", "lacteo", None, "cottage cheese lowfat"),
-    ("queso curado", "lacteo", None, "cheese cheddar"),
-    ("arroz blanco", "cereal", "raw", "rice white long-grain raw"),
-    ("arroz integral", "cereal", "raw", "rice brown long-grain raw"),
-    ("pasta", "cereal", "raw", "pasta dry enriched"),
+    ("leche entera", "lacteo", "liquid", ["milk"], "milk whole 3.25% milkfat"),
+    ("leche desnatada", "lacteo", "liquid", ["milk"], "milk nonfat fluid"),
+    ("yogur natural", "lacteo", None, ["milk"], "yogurt plain whole milk"),
+    ("queso fresco batido", "lacteo", None, ["milk"], "cottage cheese lowfat"),
+    ("queso curado", "lacteo", None, ["milk"], "cheese cheddar"),
+    ("arroz blanco", "cereal", "raw", [], "rice white long-grain raw"),
+    ("arroz integral", "cereal", "raw", [], "rice brown long-grain raw"),
+    ("pasta", "cereal", "raw", ["gluten"], "pasta dry enriched"),
     # "oats" a secas devolvía "Oil, oat": aceite de avena, 884 kcal.
-    ("avena en copos", "cereal", "raw", "oats whole grain rolled"),
-    ("quinoa", "cereal", "raw", "quinoa uncooked"),
+    # La avena está en el anexo II entre los cereales con gluten, aunque exista
+    # avena certificada sin gluten. Se marca por la lista, no por el caso.
+    ("avena en copos", "cereal", "raw", ["gluten"], "oats whole grain rolled"),
+    ("quinoa", "cereal", "raw", [], "quinoa uncooked"),
     # "bread white commercially prepared" devolvía la versión TOSTADA (290 kcal
     # frente a 266). La ficha Foundation "Bread, white, commercial" está vacía de
     # macronutrientes, así que hay que nombrar la de SR Legacy entera.
-    ("pan blanco", "pan", None, "bread white commercially prepared includes soft bread crumbs"),
+    # DUDA: el pan comercial suele llevar soja, sésamo o leche según la receta.
+    # La ficha de USDA no lo dice, así que solo se marca el gluten.
+    ("pan blanco", "pan", None, ["gluten"], "bread white commercially prepared includes soft bread crumbs"),
     # "bread whole wheat" devolvía pan de pita integral.
-    ("pan integral", "pan", None, "bread whole-wheat commercially prepared"),
-    ("patata", "tuberculo", "raw", "potato flesh and skin raw"),
+    ("pan integral", "pan", None, ["gluten"], "bread whole-wheat commercially prepared"),
+    ("patata", "tuberculo", "raw", [], "potato flesh and skin raw"),
     # "sweet potato raw" devolvía las HOJAS del boniato.
-    ("boniato", "tuberculo", "raw", "sweet potato raw unprepared food distribution program"),
-    ("lentejas", "legumbre", "raw", "lentils raw"),
-    ("garbanzos", "legumbre", "raw", "chickpeas raw"),
-    ("alubias blancas", "legumbre", "raw", "beans white raw"),
+    ("boniato", "tuberculo", "raw", [], "sweet potato raw unprepared food distribution program"),
+    ("lentejas", "legumbre", "raw", [], "lentils raw"),
+    ("garbanzos", "legumbre", "raw", [], "chickpeas raw"),
+    ("alubias blancas", "legumbre", "raw", [], "beans white raw"),
     # "olive oil" devolvía una mezcla de maíz, cacahuete y oliva. La ficha
     # Foundation de "Oil, olive, extra virgin" existe pero solo publica ácidos
     # grasos, sin calorías: la única completa es la de SR Legacy.
-    ("aceite de oliva virgen extra", "aceite", None, "oil olive salad or cooking"),
-    ("aguacate", "fruta", "raw", "avocado raw"),
-    ("almendras", "fruto_seco", "raw", "almonds raw"),
-    ("nueces", "fruto_seco", "raw", "walnuts english"),
-    ("cacahuetes", "fruto_seco", "raw", "peanuts raw"),
-    ("plátano", "fruta", "raw", "banana raw"),
-    ("manzana", "fruta", "raw", "apple raw with skin"),
+    ("aceite de oliva virgen extra", "aceite", None, [], "oil olive salad or cooking"),
+    ("aguacate", "fruta", "raw", [], "avocado raw"),
+    ("almendras", "fruto_seco", "raw", ["nuts"], "almonds raw"),
+    ("nueces", "fruto_seco", "raw", ["nuts"], "walnuts english"),
+    # El cacahuete es un alérgeno PROPIO en el anexo II: no es fruto de cáscara
+    # aunque coloquialmente se le llame fruto seco. Quien marca "frutos de
+    # cáscara" sigue viendo cacahuetes, y es lo correcto.
+    ("cacahuetes", "fruto_seco", "raw", ["peanuts"], "peanuts raw"),
+    ("plátano", "fruta", "raw", [], "banana raw"),
+    ("manzana", "fruta", "raw", [], "apple raw with skin"),
     # "orange raw" devolvía la PIEL de la naranja.
-    ("naranja", "fruta", "raw", "oranges raw all commercial varieties"),
-    ("fresas", "fruta", "raw", "strawberries raw"),
-    ("tomate", "verdura", "raw", "tomato red raw"),
-    ("cebolla", "verdura", "raw", "onion raw"),
-    ("pimiento rojo", "verdura", "raw", "peppers sweet red raw"),
-    ("brócoli", "verdura", "raw", "broccoli raw"),
-    ("espinacas", "verdura", "raw", "spinach raw"),
+    ("naranja", "fruta", "raw", [], "oranges raw all commercial varieties"),
+    ("fresas", "fruta", "raw", [], "strawberries raw"),
+    ("tomate", "verdura", "raw", [], "tomato red raw"),
+    ("cebolla", "verdura", "raw", [], "onion raw"),
+    ("pimiento rojo", "verdura", "raw", [], "peppers sweet red raw"),
+    ("brócoli", "verdura", "raw", [], "broccoli raw"),
+    ("espinacas", "verdura", "raw", [], "spinach raw"),
     # "squash zucchini raw" devolvía el calabacín baby, no el corriente.
-    ("calabacín", "verdura", "raw", "squash summer zucchini includes skin raw"),
-    ("lechuga", "verdura", "raw", "lettuce romaine raw"),
-    ("zanahoria", "verdura", "raw", "carrots raw"),
-    ("champiñones", "verdura", "raw", "mushrooms white raw"),
+    ("calabacín", "verdura", "raw", [], "squash summer zucchini includes skin raw"),
+    ("lechuga", "verdura", "raw", [], "lettuce romaine raw"),
+    ("zanahoria", "verdura", "raw", [], "carrots raw"),
+    ("champiñones", "verdura", "raw", [], "mushrooms white raw"),
 ]
 
 RATE_LIMIT_RETRIES = 3
@@ -122,7 +139,7 @@ def main():
     seed = []
     failed = []
 
-    for number, (name, category, state, term) in enumerate(FOODS, start=1):
+    for number, (name, category, state, allergens, term) in enumerate(FOODS, start=1):
         print(f"[{number:2}/{len(FOODS)}] {name} ← «{term}»", flush=True)
         try:
             data = import_food(term)
@@ -136,7 +153,9 @@ def main():
             failed.append((name, term, str(error)))
             continue
 
-        data.update(name=name, category=category, state=state)
+        data.update(
+            name=name, category=category, state=state, allergens=list(allergens)
+        )
         seed.append(data)
         print(
             f"    → {data['external_name']} "
