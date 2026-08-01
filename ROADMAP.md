@@ -131,7 +131,7 @@ Cada módulo indica: **objetivo**, **qué construyo**, **conceptos que quiero en
 - **Estado: completado.** El **CI/CD** (ADR-0005): un push a `main` construye, escanea con Trivy y publica en GHCR, con tags trazables al commit y sin publicar nada que no haya pasado el escaneo. Aprendizaje extra: fijo las actions de terceros por SHA de commit y no por tag, a raíz del secuestro de tags de `trivy-action` en marzo de 2026.
 - El **corte a multiservicio** (ADR-0008) lo hice después de M3, a propósito: quería tener observabilidad *antes* de añadir piezas móviles, y acerté — el worker apareció en los dashboards y en Kibana sin tocar nada. Partí por **modo de ejecución** (API + cola + worker) y no por dominio: los dominios siguen siendo módulos dentro de la API, que es lo que hoy se recomienda para empezar. La cola es Redis a pelo (`LPUSH`/`BRPOP`) para entender el mecanismo antes de esconderlo tras Celery.
 - Lo que más me enseñó: que `BRPOP` **borra el mensaje al entregarlo**, así que si el worker muere a mitad el trabajo se pierde en silencio. Verlo es lo que justifica migrar a Celery, en vez de usarlo porque sí.
-- **Pendiente menor:** el pipeline solo construye la imagen de la API; falta la del worker.
+- **Cerrado el 31/07/2026:** cada servicio tiene ya su propio pipeline, y el del worker pasó el escaneo de Trivy a la primera porque reutilicé la base endurecida de M1. Dupliqué el workflow en vez de unificar los dos con una `matrix`: la matriz esconde el mecanismo justo cuando lo estoy aprendiendo, y unificar después es fácil. Cada uno dispara solo con **su propio fichero** de workflow; con `.github/workflows/**` tocar uno reconstruía los dos. Y descubrí que el worker no tenía `.dockerignore` siendo el único servicio que recibe la clave de OpenRouter: su `COPY . .` se habría llevado un `.env` dentro de la imagen el día que lo hubiera.
 
 ### M3 — Observabilidad de contenedores (los dos pilares)
 La observabilidad tiene dos pilares que **no se pisan**: métricas (números en el tiempo) y logs (texto). Los abordo en ese orden.
@@ -221,21 +221,14 @@ La observabilidad tiene dos pilares que **no se pisan**: métricas (números en 
 
 ## 12. Próximo paso
 
-**Cerrar el pendiente de M2: el pipeline de la imagen del worker.** Hoy solo se
-construye la de la API. Lo hago duplicando el workflow que ya entiendo —cambiando
-el filtro de rutas, el contexto de construcción y el nombre de la imagen— en vez
-de unificarlos con una `matrix`: la matriz esconde el mecanismo justo cuando lo
-estoy aprendiendo, y unificar después es fácil.
-
-Detalle a decidir al escribirlo: el workflow actual dispara con
-`paths: '.github/workflows/**'`, así que con dos workflows tocar cualquiera
-reconstruiría las dos imágenes. Cada uno debería mirar solo su propio fichero.
-
-Y después, **M4: Kubernetes en local**, que es el módulo que más me diferencia.
+**M4: Kubernetes en local.** Es el módulo estrella y el que más me diferencia. Ya
+no hay excusas: M2 quedó cerrado del todo con el pipeline del worker, así que hay
+dos imágenes publicadas y versionadas que orquestar, no una.
 
 ### Estado a 31/07/2026
 
-- **M0, M1, M2 y M3 completados**, con el pendiente menor del worker en CI.
+- **M0, M1, M2 y M3 completados.** M2 cerrado del todo: las dos imágenes se
+  construyen, escanean y publican por separado.
 - La aplicación ya no es un esqueleto: genera planes semanales reales con un
   modelo de lenguaje (ADR-0009), tiene cuestionario inicial y un panel de trabajo
   donde veo tokens, coste, duración y errores de cada generación.
