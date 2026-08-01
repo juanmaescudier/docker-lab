@@ -221,4 +221,24 @@ La observabilidad tiene dos pilares que **no se pisan**: métricas (números en 
 
 ## 12. Próximo paso
 
-Arrancar **M0**: fijar la estructura del repo y escribir el primer Dockerfile de la API, revisándolo con criterio (flags, orden de capas, seguridad) antes de pasar a Compose.
+**Cerrar el pendiente de M2: el pipeline de la imagen del worker.** Hoy solo se
+construye la de la API. Lo hago duplicando el workflow que ya entiendo —cambiando
+el filtro de rutas, el contexto de construcción y el nombre de la imagen— en vez
+de unificarlos con una `matrix`: la matriz esconde el mecanismo justo cuando lo
+estoy aprendiendo, y unificar después es fácil.
+
+Detalle a decidir al escribirlo: el workflow actual dispara con
+`paths: '.github/workflows/**'`, así que con dos workflows tocar cualquiera
+reconstruiría las dos imágenes. Cada uno debería mirar solo su propio fichero.
+
+Y después, **M4: Kubernetes en local**, que es el módulo que más me diferencia.
+
+### Estado a 31/07/2026
+
+- **M0, M1, M2 y M3 completados**, con el pendiente menor del worker en CI.
+- La aplicación ya no es un esqueleto: genera planes semanales reales con un
+  modelo de lenguaje (ADR-0009), tiene cuestionario inicial y un panel de trabajo
+  donde veo tokens, coste, duración y errores de cada generación.
+- **Aviso a mí mismo:** llevo más tiempo del previsto en la aplicación y no en la
+  infraestructura, que es el objetivo del laboratorio. El producto puede esperar;
+  M4 y M5 son lo que da valor a esto.

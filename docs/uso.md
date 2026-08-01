@@ -25,9 +25,34 @@ cp .env.example .env
 docker compose up --build
 ```
 
-La API queda en `http://localhost:8000`.
+La API queda en `http://localhost:8000`, y ahí mismo está el **panel de trabajo**:
+una página estática servida por la propia API desde la que relleno el
+cuestionario, genero planes y veo el modelo, los tokens, el coste, la duración y
+los errores de cada generación. Para lo del día a día es más cómodo que `curl`.
 
 Los datos persisten en un volumen: `docker compose down` y un nuevo `up` los conservan; `docker compose down -v` los elimina. Las sesiones viven en Redis y son efímeras.
+
+## Generar un plan con un modelo de lenguaje
+
+El worker arranca en modo `stub` por defecto: devuelve una respuesta fija y válida
+**sin salir a internet y sin gastar dinero**, que es lo que quiero para que
+cualquiera pueda levantar el stack y verlo funcionar.
+
+Para usar un modelo de verdad hacen falta dos variables en el `.env`
+(ver `.env.example`, que explica cada una):
+
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=tu_clave
+```
+
+La clave **solo la recibe el worker**, que es el único servicio con salida a
+internet a través de la red `egress`. La API no la ve.
+
+Un plan semanal tarda **minutos**, no segundos, así que `POST /plans/generate`
+devuelve **202** con un identificador y el trabajo se sigue en `GET /jobs/<id>`.
+El porqué del modelo elegido y lo que aprendí midiendo está en
+[ADR-0009](adr/0009-proveedor-y-modelo-de-lenguaje.md).
 
 ## Probar la API
 

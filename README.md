@@ -15,7 +15,7 @@ Laboratorio de contenedores construido de forma progresiva como proyecto de port
 
 ![Arquitectura del laboratorio (M0)](docs/img/architecture.svg)
 
-> **Estado:** en construcción. **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR más el corte a multiservicio con cola y worker (M2), y observabilidad completa con sus dos pilares: **métricas** (Prometheus + Grafana, en tres capas) y **logs** (Elasticsearch + Kibana + Fluent Bit) (M3). Lo siguiente, según el [ROADMAP](ROADMAP.md): Kubernetes e IaC en AWS.
+> **Estado:** en construcción. **M0–M3 completados** — API en contenedores con PostgreSQL y sesiones en Redis (M0), imagen endurecida y escaneada con Trivy (M1), CI/CD de imágenes con GitHub Actions y GHCR más el corte a multiservicio con cola y worker (M2), y observabilidad completa con sus dos pilares: **métricas** (Prometheus + Grafana, en tres capas) y **logs** (Elasticsearch + Kibana + Fluent Bit) (M3). El worker ya genera planes de verdad llamando a un modelo de lenguaje ([ADR-0009](docs/adr/0009-proveedor-y-modelo-de-lenguaje.md)), lo que hace que la cola, los reintentos y la idempotencia protejan algo real y no un ejercicio. Lo siguiente, según el [ROADMAP](ROADMAP.md): la imagen del worker en CI, y después Kubernetes e IaC en AWS.
 
 ---
 
@@ -108,6 +108,8 @@ docker-lab/
 ├── docs/
 │   ├── adr/                      # Decisiones de arquitectura (ADR)
 │   ├── diseno-dominio.md         # Modelo de entidades y decisiones de diseño
+│   ├── cuestionario-inicial.md   # Las preguntas al usuario y sus opciones
+│   ├── uso.md                    # Cómo levantarlo y llamadas de ejemplo
 │   └── img/                      # Diagramas y capturas
 ├── services/
 │   ├── api/                      # Servicio Flask: Dockerfile, código y migraciones
