@@ -1,5 +1,5 @@
 # Dockerfile del servicio "api" (Flask)
-# Objetivo: imagen ligera, multi-stage, usuario no-root
+# Objetivo: imagen ligera, usuario no-root
 
 FROM python:3.13-slim
 

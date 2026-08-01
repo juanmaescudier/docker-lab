@@ -1,20 +1,20 @@
 # ---------------------------------------------------------------------------------------------------
-# Pipeline CI/CD de la imagen de la API.
+# Pipeline CI/CD de la imagen del worker.
 # En cada push a main:  construye -> escanea (Trivy) -> publica en GHCR.
 # En cada Pull Request:  construye -> escanea, pero NO publica (validación previa).
 #
 # Nota de versiones: las actions (@vX) suben con el tiempo. Estos majors funcionan;
 # ---------------------------------------------------------------------------------------------------
 
-name: Build-scan-push nutriapp image GHCR
+name: Build-scan-push worker image GHCR
 
 # === DISPARADORES (eventos que lanzan el workflow) ===
 on:
   push:
     branches: [main]              # push a main -> construye, escanea Y publica
     paths:                        # ...pero solo si cambian estos archivos (optimización)
-      - 'services/api/**'         #   2 asteríscos = todo lo que hay dentro de la carpeta
-      - '.github/workflows/**'    #   o si cambia el propio workflow
+      - 'services/worker/**'         #   2 asteríscos = todo lo que hay dentro de la carpeta
+      - '.github/workflows/publish-worker-image.yml'    #   o si cambia el propio workflow
   pull_request:
     branches: [main]              # PR hacia main -> construye y escanea, NO publica
   workflow_dispatch:              # botón manual "Run workflow" en la pestaña Actions
@@ -30,7 +30,7 @@ jobs:
 
     # Variable reutilizable: nombre de la imagen en GHCR (todo en minúsculas)
     env:
-      IMAGE_NAME: ghcr.io/${{ github.repository }}-api   # -> ghcr.io/juanmaescudier/docker-lab-api
+      IMAGE_NAME: ghcr.io/${{ github.repository }}-worker   # -> ghcr.io/juanmaescudier/docker-lab-worker
 
     steps:
       # 1) Traer el código del repo al runner
@@ -67,16 +67,16 @@ jobs:
       - name: Build (cargar en local para escanear)
         uses: docker/build-push-action@v7
         with:
-          context: ./services/api             # dónde está el Dockerfile y el código
+          context: ./services/worker          # dónde está el Dockerfile y el código
           load: true                          # carga la imagen en el docker local del runner
           push: false                         # todavía NO se publica
-          tags: nutriapp:ci                   # etiqueta local temporal, solo para el escaneo
+          tags: worker:ci                   # etiqueta local temporal, solo para el escaneo
 
       # 6) Escanear la imagen construida con Trivy
       - name: Trivy scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          image-ref: nutriapp:ci              # la imagen que acabamos de cargar
+          image-ref: worker:ci              # la imagen que acabamos de cargar
           severity: CRITICAL,HIGH             # solo nos importan estas
           ignore-unfixed: true                # ignora las que NO tienen fix (como las del SO base)
           exit-code: '1'                      # si hay alguna FIXABLE -> rompe el build
@@ -87,7 +87,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
         with:
-          context: ./services/api
+          context: ./services/worker
           push: true                                # ahora sí, publica
           tags: ${{ steps.meta.outputs.tags }}      # los tags reales (sha, latest) del paso 3
           labels: ${{ steps.meta.outputs.labels }}
