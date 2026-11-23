@@ -18,6 +18,10 @@ Mantener la base **`python:3.13-slim`** (Debian 13, la más fresca disponible en
 - **Versiones fijadas** en todo (nada de `latest`).
 - **Secretos fuera** de la imagen y del repo (`.dockerignore`, `.gitignore`, `.env`).
 - **Escaneo con Trivy** integrado; informes guardados en `docs/security/`.
+- **Sin pip en la imagen final** (añadido el 2026-11-23, ver historial). Se desinstala con `RUN pip uninstall -y pip` después de instalar las dependencias y antes de cambiar a `appuser`: antes porque pip vive en `/usr/local`, que es de root; después porque sin pip no se podrían instalar. La aplicación no lo necesita para ejecutarse, y pip trae dentro **sus propias copias** de otras librerías (`pip/_vendor/`) que Trivy detecta como vulnerables aunque mi código no las use nunca. **Lo que no está en la imagen no se puede explotar.**
+- **Las dependencias transitivas vulnerables se fijan explícitamente** en `requirements.txt`, con un comentario que explique por qué están ahí aunque no las importe en ningún sitio.
+
+Todo esto se aplica a las dos imágenes, `api` y `worker`, que comparten la misma base.
 
 Evalué **distroless** y lo descarté (ver alternativas).
 
@@ -32,7 +36,11 @@ Evalué **distroless** y lo descarté (ver alternativas).
 - **0 CVEs en las dependencias de Python.**
 - El `apt upgrade` no bajó el número hoy (no hay fixes publicados), pero mantiene el hábito y aplicará parches en cuanto existan.
 - **Lección clave:** una imagen mínima reduce la **superficie de ataque**, no necesariamente el **recuento de CVEs**; el recuento depende sobre todo de lo **fresca** que sea la base. Son dos propiedades de seguridad distintas.
+- **Quitar pip no lo borra de verdad.** pip viene en la capa de la imagen base, y las capas de una imagen **solo suman**: desinstalarlo en una capa superior lo tapa con una marca de borrado (*whiteout*), pero sigue físicamente en la capa de abajo. Desaparece del sistema de ficheros final, que es lo que ve el contenedor y lo que analiza Trivy; la imagen no ocupa menos, y quien extraiga la capa base lo seguiría viendo. Eliminarlo del todo exigiría una base que no lo traiga, como distroless, que ya descarté arriba. Para lo que necesito, taparlo basta.
+- **Pierdo pip para diagnosticar dentro del contenedor.** Un `pip show` dentro de la imagen ya no funciona. Es el precio de reducir superficie, y lo acepto: el diagnóstico de dependencias se puede hacer con Trivy o mirando los `.dist-info`.
+- **Fijar las dependencias directas no fija las transitivas.** Mis `requirements.txt` fijan versiones exactas, pero lo que esas librerías traen detrás va por rangos y se resuelve **el día que se construye la imagen**. Con el mismo `requirements.txt`, una imagen de julio y otra de noviembre pueden llevar librerías distintas. Por eso "versiones fijadas en todo" era cierto solo a medias.
 - **Mejora futura:** migrar a una base de recuento casi cero (Chainguard/Wolfi) si el proyecto lo justifica.
+- **Mejora futura:** que Dependabot vigile también las dependencias de Python (`package-ecosystem: "pip"`) y no solo las actions, para enterarme de un CVE por un PR y no por casualidad.
 
 ## Evidencia (escaneos Trivy en `docs/security/`)
 
@@ -41,3 +49,19 @@ Evalué **distroless** y lo descarté (ver alternativas).
 | `scan-baseline.txt` | `python:3.13-slim` (Debian 13) — base | 168 |
 | `scan-distroless.txt` | distroless (Debian 12) — experimento | 211 |
 | `scan-final.txt` | `python:3.13-slim` + `apt upgrade` — final | 168 |
+
+---
+
+## Historial
+
+- **2026-11-23** — Reviso el ADR tras un fallo de Trivy en el CI. El "0 CVEs en las dependencias de Python" de julio había dejado de ser cierto: el escaneo encontró **5 vulnerabilidades HIGH con versión corregida** en las dos imágenes, y `main` llevaba tres commits en rojo sin que nada de lo que yo había tocado tuviera que ver.
+
+  | Librería | Instalada | Corregida | De dónde venía |
+  |---|---|---|---|
+  | `msgpack` | 1.1.2 | 1.2.3 | Copia interna de pip (`pip/_vendor/`), en las dos imágenes |
+  | `urllib3` | 2.7.0 | 2.8.0 | Copia interna de pip en las dos, y además instalada de verdad en el worker por ser dependencia de `requests` |
+  | `setuptools` | 70.3.0 | 78.1.1 | No la localicé. Lo más probable es que fuera `pkg_resources`, que pip también lleva dentro, pero es una deducción: desapareció al quitar pip y no llegué a confirmarlo |
+
+  Ninguna estaba en mis `requirements.txt`. `pip show` no encontraba las copias internas de pip porque solo ve paquetes instalados; Trivy sí, porque recorre todo el sistema de ficheros. Lo resolví con un `find` dentro del contenedor, que me dio las rutas.
+
+  Arreglos: quitar pip de las dos imágenes, y fijar `urllib3==2.8.0` en el worker. Subir `requests` no servía, porque pide urllib3 por rango y no por versión exacta. Tras el cambio, Trivy en verde en los dos pipelines.
