@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar de local al directorio del contenedor siempre de host:cont
 COPY . .
+RUN pip uninstall -y pip
 
 # Exposición de un puerto
 EXPOSE 8000

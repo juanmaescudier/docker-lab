@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar de local al directorio del contenedor siempre de host:cont
 COPY . .
+RUN pip uninstall -y pip
 
 # Cambiar de usuario antes de ejecutar codigo (minimo privilegio)
 RUN useradd -r -u 1001 appuser
