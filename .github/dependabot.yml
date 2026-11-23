@@ -1,0 +1,19 @@
+# =============================================================================
+# Dependabot: actualización automática de las GitHub Actions
+# =============================================================================
+# Las actions de los workflows van fijadas por SHA de commit (ver ADR-0005),
+# así que no se actualizan solas como pasaría con un tag tipo @v4.
+# Dependabot revisa cada semana si hay versiones nuevas y abre un Pull Request
+# con el SHA nuevo y el comentario de versión actualizado.
+# Yo reviso el PR, compruebo que el CI pasa y decido si lo fusiono.
+#
+# Este fichero va en .github/ (no en .github/workflows/): no es un workflow,
+# es la configuración de Dependabot.
+# =============================================================================
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"   # qué vigila: las actions de los workflows
+    directory: "/"                        # Dependabot busca solo en .github/workflows/
+    schedule:
+      interval: "weekly"                  # una revisión por semana
